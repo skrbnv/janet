@@ -1,0 +1,13 @@
+{
+	"python.linting.enabled": true,
+	"python.linting.pylintPath": "flake8",
+	"python.linting.flake8Args": [
+		"--max-line-length=140",
+		"--ignore=F401,F403,F405,E501,E265,E266,E126,W503,W504",
+	],
+	"editor.formatOnSave": true,
+	"python.formatting.provider": "yapf", // or "black" here
+	"python.linting.pylintEnabled": false,
+	"python.linting.pylamaEnabled": false,
+	"python.linting.flake8Enabled": true,
+}

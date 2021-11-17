@@ -112,8 +112,8 @@ def generate_triplets(D,
     return aa, pp, nn
 
 
-def train_triplet_model_dual(D, model, params, optimizer, anchors, positives,
-                             negatives, epoch, device, criterion):
+def train_triplet_model(D, model, params, optimizer, anchors, positives,
+                        negatives, epoch, device, criterion):
     # Prepare data for dataloader: embedding for anchor, spectrograms for positive and negative
     aa = [el['embedding'] for el in anchors]
     pp = [D.cache_read(el['cacheId']) for el in positives]

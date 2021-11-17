@@ -15,6 +15,7 @@ from scipy.spatial.distance import cdist
 import libs.visualization as _viz
 import matplotlib.pyplot as plt
 import sys
+from glob import glob
 
 global ambientmemcache
 global musicmemcache
@@ -52,9 +53,40 @@ def fix_seed(seed=1):
     torch.cuda.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-    torch.backends.cudnn.enabled = False
-    torch.backends.cudnn.deterministic = True
+    #torch.backends.cudnn.enabled = False
+    #torch.backends.cudnn.deterministic = True
     return True
+
+
+def cleanup(run_id=None, checkpointdir='./checkpoints'):
+    if run_id is None:
+        raise Exception("No run id provided")
+    allcp = glob(os.path.join(checkpointdir, run_id + "*"))
+    latestcp = max(allcp, key=os.path.getctime)
+    for cp in allcp:
+        if cp == latestcp:
+            continue
+        else:
+            os.remove(cp)
+    print(
+        f"Cleanup complete, removed all checkpoints except {os.path.basename(latestcp)}"
+    )
+    return True
+
+
+def early_stop(losses=None, epochs=20, criterion='max'):
+    if losses is None:
+        return False
+    if type(losses) == torch.Tensor:
+        losses = losses.detach().cpu().numpy()
+    if not type(losses) == np.ndarray:
+        losses = np.array(losses)
+    crit_fn = np.argmax if criterion == 'max' else np.argmin
+    best = losses.shape[0] - crit_fn(np.flip(losses), axis=0) - 1
+    if best <= losses.shape[0] - epochs:
+        return True
+    else:
+        return False
 
 
 def todolist():

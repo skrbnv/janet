@@ -5,20 +5,19 @@ import gc
 import libs.functions as _fn
 from libs.data import Dataset
 import libs.losses as _losses
-from libs.models.resnet_64x192_3x3cores import Model
+from libs.models.resnet_models import ResNet10_64x192_kernel5_nomaxpool as Model
 import libs.validation as _val
 import libs.triplets as _tpl
 import wandb
 import os
 import torchinfo
 import sys
-from libs.listen import Listen
 # ------------------------- CONSTANTS -------------------------
 # BASIC
 WANDBPROJECTNAME = 'triplets-timit-simple'
 EPOCHS_TOTAL = 9999
 # GPU
-GPU_ID = 1
+GPU_ID = 0
 # DATASETS & CACHE
 DATASET_DIR = "/media/my3bikaht/EXT4/datasets/TIMIT2/datasets/"
 DATASET_TRAIN = "glued-1_92s-mel64-plain-train.dt"
@@ -28,8 +27,8 @@ SPECTROGRAMS_CACHE = "/media/my3bikaht/EXT4/datasets/TIMIT2/cache/glued-1_92s-me
 # VISUALISATION
 VIZ_DIR = "./visualization/"
 # CHECKPOINTS
-RUN_ID = '3hg1y70i'
-CHECKPOINTFILENAME = "./checkpoints/64x192_mod2_01.dict"
+RUN_ID = '2uw2l6w1'
+CHECKPOINTFILENAME = "./checkpoints/2uw2l6w1_epoch_41.dict"
 # SUBSETS
 USE_SUBSETS = True
 SUBSET_SPEAKERS = 64
@@ -38,9 +37,12 @@ SUBSET_SPECTROGRAMS_PER_SPEAKER = 50
 MARGIN = .3
 BATCH_SIZE = 32
 TRIPLETSPERCLASS = 20
-POSITIVECRITERION = 'Random'
-NEGATIVESEMIHARD = 1
-NEGATIVEHARD = 1
+POSITIVECRITERION = 'Random'  # 'Random' vs 'Hard'.
+# When POSITIVECRITERION == 'Hard' closest positive AND farthest
+# negative will be selected not taking into account following
+# negative strategies
+NEGATIVESEMIHARD = 1  # select semi-hard negatives
+NEGATIVEHARD = 1  # select hard negatives
 
 # ------------------------- INIT -------------------------
 args = [arg.replace('-', '').lower() for arg in sys.argv][1:]
@@ -48,7 +50,6 @@ RESUME = True if 'resume' in args else False
 WANDB = True if 'wandb' in args else False
 # Generating unqiue hash for the training run
 __run_hash = RUN_ID if RESUME else _fn.get_random_hash()
-listen = Listen()
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = str(GPU_ID)
 
@@ -83,14 +84,14 @@ if torch.cuda.is_available():
     model.cuda()
 _fn.report("Model created")
 
-torchinfo.summary(model, (64, 1, 64, 192))
+torchinfo.summary(model, (32, 1, 64, 192))
 
 if RESUME:
     model.load_state_dict(checkpoint['state_dict'])
     _fn.report("Model state dict loaded from checkpoint")
 
-optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9)
-#optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5, eps=1e-8)
+#optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9)
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 _fn.report("Optimizer initialized")
 
 #if RESUME:
@@ -125,15 +126,17 @@ criterion = _losses.CustomTripletMarginLoss(MARGIN)
 ########################################################
 if WANDB:
     wandb.watch(model)
-bestT1 = 0
+
+top1 = checkpoint['top1'] if RESUME and 'top1' in checkpoint.keys() else []
+
 for epoch in range(initial_epoch, EPOCHS_TOTAL):
     _fn.report("**************** Epoch", epoch, "out of", EPOCHS_TOTAL,
                "****************")
 
     # gc.collect()
 
-    losses_all = []
     triplets_generated_per_epoch = 0
+    epoch_losses = []
     _fn.report("-------------- Training ----------------")
     _fn.report(f'Generating subsets with {SUBSET_SPEAKERS} speakers')
     for batch_speakers in D.speakers_iterator(SUBSET_SPEAKERS, True):
@@ -161,28 +164,26 @@ for epoch in range(initial_epoch, EPOCHS_TOTAL):
             'shuffle': True,
             'num_workers': 0
         }
-        losses = _tpl.train_triplet_model_dual(Dsub,
-                                               model=model,
-                                               params=model_params,
-                                               optimizer=optimizer,
-                                               anchors=anchors,
-                                               positives=positives,
-                                               negatives=negatives,
-                                               epoch=epoch,
-                                               device=device,
-                                               criterion=criterion)
+        losses = _tpl.train_triplet_model(Dsub,
+                                          model=model,
+                                          params=model_params,
+                                          optimizer=optimizer,
+                                          anchors=anchors,
+                                          positives=positives,
+                                          negatives=negatives,
+                                          epoch=epoch,
+                                          device=device,
+                                          criterion=criterion)
         _fn.report(f'Loss: {np.mean(losses):.4f}')
-        losses_all.extend(losses)
-    _fn.report(f'Epoch loss: {np.mean(losses_all):.4f}')
+        epoch_losses.extend(losses)
+    _fn.report(f'Epoch loss: {np.mean(epoch_losses):.4f}')
     """
     _fn.report("-------------- Visualization ----------------")
     if epoch > 0 and epoch % 1 == 0:
         dataset = _db.visualize(D, epoch, samples=30)
     """
 
-    if epoch % 10 == 0 or epoch == initial_epoch:
-        top1train, top5train, top1val, top5val = _val.validate(
-            model, D, V, device)
+    top1train, top5train, top1val, top5val = _val.validate(model, D, V, device)
 
     centroids = D.calculate_centroids()
     dmin, davg, dmax = _fn.centroid_distances(centroids)
@@ -193,7 +194,7 @@ for epoch in range(initial_epoch, EPOCHS_TOTAL):
 
     if WANDB:
         wandb.log({
-            "Loss": np.mean(losses_all),
+            "Loss": np.mean(epoch_losses),
             "Top1 acc over training data": top1train,
             "Top5 acc over training data": top5train,
             "Top1 acc over validation data": top1val,
@@ -208,8 +209,8 @@ for epoch in range(initial_epoch, EPOCHS_TOTAL):
     ##########################################################
     ##### Saving checkpoint if validation accuracy improved
     ##########################################################
-    if epoch > 0 and top1val > bestT1:
-        bestT1 = top1val
+    top1.append(top1val)
+    if top1[-1] > np.max(top1[:-1], initial=0):
         chkptfname = "./checkpoints/" + __run_hash + "_epoch_" + str(
             epoch).zfill(2) + ".dict"
         torch.save(
@@ -217,12 +218,10 @@ for epoch in range(initial_epoch, EPOCHS_TOTAL):
                 'epoch': epoch,
                 'state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
+                'top1': top1
             }, chkptfname)
         _fn.report(f'Checkpoint {chkptfname} saved')
-    if listen.check('exit'):
+    if _fn.early_stop(top1, criterion='max'):
+        print("No validation progress detected or requested to stop, stopping")
+        _fn.cleanup(run_id=__run_hash)
         sys.exit(1)
-    nlr = listen.check('lr')
-    if nlr:
-        for pg in optimizer.param_groups:
-            pg['lr'] = nlr
-        _fn.report(f'Learning rate updated to {nlr}')
