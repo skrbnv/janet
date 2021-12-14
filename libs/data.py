@@ -1,5 +1,5 @@
 import numpy as np
-from libs.functions import report, distance
+import libs.functions as _fn
 import libs.visualization as _viz
 import random
 import torch
@@ -8,10 +8,11 @@ from scipy.spatial.distance import cdist
 import os
 import itertools
 import gc
+from torch.utils.data import Dataset as UtilsDataset
 # import psutil
 
 
-class Dataset:
+class Dataset(UtilsDataset):
     def __init__(self, data=None, filename=None, cache_path=None):
         if data is not None and filename is not None:
             raise Exception(
@@ -25,6 +26,8 @@ class Dataset:
             self.data = self.load(filename)
         self.cache_path = cache_path
         self.report = print
+        self.dm = None
+        self.speakers = self.get_unique_speakers()
 
     def load(self, filename):
         with open(filename, 'rb') as handle:
@@ -52,11 +55,31 @@ class Dataset:
             pickle.dump(self.data, handle, protocol=pickle.HIGHEST_PROTOCOL)
         return True
 
+    def update_routine(self):
+        self.speakers = self.get_unique_speakers()
+
     def append(self, record):
         pos = len(self.data)
         self.data[pos] = record
         self.data[pos]['_id'] = pos
+        self.update_routine()
         return True
+
+    def encode_speaker_one_hot(self, speaker):
+        output = np.zeros(len(self.speakers))
+        try:
+            spk_idx = self.speakers.index(speaker)
+        except Exception:
+            return None
+        output[spk_idx] = 1
+        return output
+
+    def encode_speaker_index(self, speaker):
+        try:
+            spk_idx = self.speakers.index(speaker)
+            return spk_idx
+        except Exception:
+            return None
 
     def cache_write(self, id, arr, cache=None):
         if cache is None:
@@ -103,7 +126,7 @@ class Dataset:
                 return arr  # np.squeeze(arr, axis=0)  # .T
         raise Exception("No such file")
 
-    def trimmed(self, procs=2, batch_size=None):
+    def trimmed(self, batch_size, procs=2):
         '''
         We need to remove last n records from dataset to fit it following
         requirements:
@@ -111,10 +134,8 @@ class Dataset:
         D%batch_size != 1 (does not have 1 remaining element for batchnorm)
         (D/3)%batch_size != 1 (same but for 1/3 for embeddings part)
         '''
-        if batch_size is None:
-            raise Exception("Trim procedure missing batch size")
-        D_len = len(self.data)
-        for i in range(len(self.data)):
+        D_len = self.__len__()
+        for i in range(D_len):
             if (D_len - i) % procs > 0:
                 continue
             if (D_len - i) % batch_size == 1:
@@ -128,8 +149,6 @@ class Dataset:
         return list(speakers)
 
     def get_speakers_subset(self, max_speakers=None, shuffle=True):
-        if max_speakers is None:
-            raise Exception("Number of speakers not provided")
         speakers = self.get_unique_speakers()
         if shuffle is True:
             random.shuffle(speakers)
@@ -139,7 +158,7 @@ class Dataset:
         return sum(el['selected'] is False for el in self.data.values())
 
     def count(self):
-        return len(self.data)
+        return self.__len__()
 
     length = count
     total = count
@@ -197,6 +216,10 @@ class Dataset:
         else:
             return centroids
 
+    def distance(self, id1, id2):
+        assert self.dm is not None, 'Distance matrix was not calculated before'
+        return self.dm[id1, id2]
+
     def calculate_centroids_dict(self, s=None):
         speakers = self.get_unique_speakers()
         centroids = {}
@@ -217,7 +240,7 @@ class Dataset:
             return centroids
 
     def update_embeddings(self, model, device, batch_size=32):
-        stop_value = len(self.data) - 1
+        stop_value = self.__len__() - 1
         keys = []
         spectrograms = []
         for i, (key, value) in enumerate(self.data.items()):
@@ -226,7 +249,7 @@ class Dataset:
             if len(keys) == batch_size or i == stop_value:
                 with torch.no_grad():
                     embeddings = model(
-                        torch.FloatTensor(spectrograms).to(device))
+                        torch.FloatTensor(np.array(spectrograms)).to(device))
                 for j, key in enumerate(keys):
                     self.data[key]['embedding'] = embeddings[j].detach().cpu(
                     ).numpy()
@@ -256,10 +279,10 @@ class Dataset:
     def get_random_record(self, flag=True):
         """Return random non-flagged record"""
         if self.available() == 0:
-            report("No unflagged records left")
+            self.report("No unflagged records left")
             return None
 
-        length = len(self.data)
+        length = self.__len__()
         while True:
             index = random.randint(0, length - 1)
             if self.data[index]['selected'] is False:
@@ -299,7 +322,7 @@ class Dataset:
         bestChoice = records[0]
         minDistance = np.finfo(np.float32).max
         for record in records:
-            distCandidate = distance(embedding, record['embedding'])
+            distCandidate = _fn.distance(embedding, record['embedding'])
             if distCandidate < minDistance:
                 minDistance = distCandidate
                 bestChoice = record
@@ -334,8 +357,7 @@ class Dataset:
             raise Exception(f'No siblings found for speaker {speaker}')
         d = 0
         for sibling in siblings:
-            candidate = distance(self.data[id]['embedding'],
-                                 sibling['embedding'])
+            candidate = self.distance(id, sibling['_id'])
             if candidate > d:
                 d = candidate
                 best_id = sibling['_id']
@@ -346,8 +368,7 @@ class Dataset:
         opposites = self.get_opposites(speaker, limit=limit_scope, flag=False)
         d = np.finfo(np.float32).max
         for opposite in opposites:
-            candidate = distance(self.data[id]['embedding'],
-                                 opposite['embedding'])
+            candidate = self.distance(id, opposite['_id'])
             if candidate < d:
                 d = candidate
                 best_id = opposite['_id']
@@ -357,7 +378,7 @@ class Dataset:
         """ Returns random records not belonging to same speaker
         """
 
-        length = len(self.data)
+        length = self.__len__()
         # get number of opposites available for search but stop when we reach limit
         # to save computing time
         maxcount = 0
@@ -381,18 +402,16 @@ class Dataset:
         return records
 
     def get_randomized_subset_with_augmentation(self,
+                                                max_records,
                                                 speakers_filter=[],
-                                                augmentations_filter=[],
-                                                max_records=None):
+                                                augmentations_filter=[]):
         # adding sorted just in case order follows initial order during creation,
         # when same speaker records were added sequentially
-        if max_records is None:
-            raise Exception("Number of spectrograms per speaker not provided")
         current_speaker = None
         records = []
         output = {}
         counter = 0
-        stopval = len(self.data.items()) - 1
+        stopval = self.__len__() - 1
         for index, (key, value) in enumerate(sorted(self.data.items())):
             # init
             if current_speaker is None:
@@ -416,9 +435,7 @@ class Dataset:
                 current_speaker = value['speaker']
         return Dataset(data=output, cache_path=self.cache_path)
 
-    def get_randomized_subset(self, speakers_filter=[], max_records=None):
-        if max_records is None:
-            raise Exception("Number of spectrograms per speaker not provided")
+    def get_randomized_subset(self, max_records, speakers_filter=[]):
         return self.get_randomized_subset_with_augmentation(
             speakers_filter=speakers_filter,
             augmentations_filter=[],
@@ -438,3 +455,28 @@ class Dataset:
                 subset.extend(searchResults)
             dataset.append(subset)
         _viz.visualize(dataset=dataset, epoch=epoch)
+
+    def calculate_distances(self, metric='cosine'):
+        # since all subsets are enumerated on creation, we will not create hash table, it is too slow
+        k = list(self.data.keys())
+        e = [self.data[key]['embedding'] for key in k]
+        self.dm = cdist(e, e, metric=metric)
+        return self.dm
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index, process_label=1):
+        '''
+        process_label = 0: Do not process
+                      = 1: One Hot encoding
+                      = 2: index encoding
+        '''
+        input = self.cache_read(self.data[index]['cacheId'])
+        if process_label == 1:
+            label = self.encode_speaker_one_hot(self.data[index]['speaker'])
+        elif process_label == 2:
+            label = self.encode_speaker_index(self.data[index]['speaker'])
+        else:
+            label = self.data[index]['speaker']
+        return input, label

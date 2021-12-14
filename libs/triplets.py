@@ -23,11 +23,11 @@ def sub_generate_triplet_pair(D,
         for positive in positive_pool:
             if positive['_id'] == anchor['_id']:
                 continue
-            dAP = _fn.distance(anchor['embedding'], positive['embedding'])
+            dAP = D.distance(anchor['_id'], positive['_id'])
 
             np.random.shuffle(negative_pool)
             for negative in negative_pool:
-                dAN = _fn.distance(anchor['embedding'], negative['embedding'])
+                dAN = D.distance(anchor['_id'], negative['_id'])
                 # semi hard selection: dAP < dAN < dAP+margin
                 # hard selection: dAN < dAP
                 if (negativesemihard and dAP < dAN
@@ -48,6 +48,7 @@ def generate_triplets_mp(D=None,
     aa, pp, nn = [], [], []
     pool = mp.Pool(min(mp.cpu_count(), 8))
     speakers = D.get_unique_speakers()
+    D.calculate_distances()
     for i in range(0, len(speakers), pool._processes):
         pool_data = [(D, limit, speaker, positive_strategy, negativesemihard,
                       negativehard)

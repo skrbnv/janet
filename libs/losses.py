@@ -1,6 +1,7 @@
-from torch import Tensor
+from torch import Tensor, is_tensor
 from torch.nn import Module, CosineSimilarity
 from torch.nn.functional import relu
+import numpy as np
 
 esq = 7.3890560989306495
 
@@ -60,3 +61,35 @@ class Custom3x3Loss(Module):
         dANs = 1 - self.Cosine(anchor, negative)
         losses = relu(dAPs - dANs + currentMargin)
         return losses.mean()  # + mean(dAPs)
+
+
+class Losses():
+    def __init__(self) -> None:
+        self.losses = {}
+
+    def append(self, losses, epoch=None):
+        assert epoch is not None, 'No epoch value provided'
+        if epoch in self.losses.keys():
+            self.losses[epoch].extend(losses)
+        else:
+            self.losses[epoch] = losses
+
+    def list(self, epoch=None):
+        assert epoch is not None, 'No epoch value provided'
+        if epoch in self.losses.keys():
+            return self.losses[epoch]
+        else:
+            return None
+
+    def mean(self, epoch=None):
+        return np.mean(np.array(self.list(epoch)))
+
+    def min(self, epoch=None):
+        return np.min(np.array(self.list(epoch)))
+
+    def max(self, epoch=None):
+        return np.max(np.array(self.list(epoch)))
+
+    def mean_per_epoch(self):
+        losses = [self.mean(key) for key in self.losses.keys()]
+        return losses

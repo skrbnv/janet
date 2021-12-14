@@ -1,3 +1,4 @@
+from genericpath import isfile
 import os
 import datetime
 #import soundfile as sf
@@ -16,6 +17,8 @@ import libs.visualization as _viz
 import matplotlib.pyplot as plt
 import sys
 from glob import glob
+import re
+from importlib import import_module
 
 global ambientmemcache
 global musicmemcache
@@ -74,7 +77,33 @@ def cleanup(run_id=None, checkpointdir='./checkpoints'):
     return True
 
 
-def early_stop(losses=None, epochs=20, criterion='max'):
+def checkpoint(id=None, data=None, path='./checkpoints', cleanup=True):
+    removables = glob(os.path.join(path, f'{id}*'))
+    if len(removables) > 0:
+        latest = os.path.basename(max(removables, key=os.path.getctime))
+        try:
+            counter = int(re.search(r'(\d{3})\.dict$', latest).groups()[0])
+        except Exception:
+            counter = 0
+    else:
+        counter = 0
+    if id is None or data is None:
+        print('Missing checkpoint parameters, skipping')
+        return False
+    chkptfname = os.path.join(path, f'{id}{(counter+1):03}.dict')
+    torch.save(data, chkptfname)
+    if not isfile(chkptfname):
+        raise IOError(f'Checkpoint {chkptfname} was not saved')
+    else:
+        report(f'Checkpoint {chkptfname} saved')
+    if cleanup:
+        for rm in removables:
+            os.remove(rm)
+    if not isfile(chkptfname):
+        raise IOError(f'Checkpoint {chkptfname} was deleted by cleanup')
+
+
+def early_stop(losses=None, epochs=50, criterion='max'):
     if losses is None:
         return False
     if type(losses) == torch.Tensor:

@@ -1,70 +1,17 @@
-import random
 import torch
 import numpy as np
 import gc
 import libs.functions as _fn
 from libs.data import Dataset
 import libs.losses as _losses
-from libs.models.resnet_models import ResNet10_64x192_kernel5_nomaxpool as Model
 import libs.validation as _val
 import libs.triplets as _tpl
+from importlib import import_module
 import wandb
 import os
 import torchinfo
 import sys
-# ------------------------- CONSTANTS -------------------------
-# BASIC
-WANDBPROJECTNAME = 'triplets-timit-simple'
-EPOCHS_TOTAL = 9999
-# GPU
-GPU_ID = 0
-# DATASETS & CACHE
-DATASET_DIR = "/media/my3bikaht/EXT4/datasets/TIMIT2/datasets/"
-DATASET_TRAIN = "glued-1_92s-mel64-plain-train.dt"
-DATASET_VALIDATE = "glued-1_92s-mel64-plain-validate.dt"
-DATASET_TEST = "TIMIT-test.dt"
-SPECTROGRAMS_CACHE = "/media/my3bikaht/EXT4/datasets/TIMIT2/cache/glued-1_92s-mel64-plain"
-# VISUALISATION
-VIZ_DIR = "./visualization/"
-# CHECKPOINTS
-RUN_ID = '2uw2l6w1'
-CHECKPOINTFILENAME = "./checkpoints/2uw2l6w1_epoch_41.dict"
-# SUBSETS
-USE_SUBSETS = True
-SUBSET_SPEAKERS = 64
-SUBSET_SPECTROGRAMS_PER_SPEAKER = 50
-# TRIPLETS
-MARGIN = .3
-BATCH_SIZE = 32
-TRIPLETSPERCLASS = 20
-POSITIVECRITERION = 'Random'  # 'Random' vs 'Hard'.
-# When POSITIVECRITERION == 'Hard' closest positive AND farthest
-# negative will be selected not taking into account following
-# negative strategies
-NEGATIVESEMIHARD = 1  # select semi-hard negatives
-NEGATIVEHARD = 1  # select hard negatives
-
-# ------------------------- INIT -------------------------
-args = [arg.replace('-', '').lower() for arg in sys.argv][1:]
-RESUME = True if 'resume' in args else False
-WANDB = True if 'wandb' in args else False
-# Generating unqiue hash for the training run
-__run_hash = RUN_ID if RESUME else _fn.get_random_hash()
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = str(GPU_ID)
-
-if RESUME:
-    checkpoint = torch.load(CHECKPOINTFILENAME)
-
-# Fixing seed for reproducibility
-_fn.fix_seed(1)
-
-if WANDB:
-    if RESUME:
-        print(f'Your run id is {RUN_ID} with checkpoint {CHECKPOINTFILENAME}')
-        input("Press any key if you want to continue >>")
-        wandb.init(id=RUN_ID, project=WANDBPROJECTNAME, resume="must")
-    wandb.init(project=WANDBPROJECTNAME, resume=False)
+import argparse
 
 # ------------------------- MAIN -------------------------
 _fn.report("**************************************************")
@@ -72,36 +19,87 @@ _fn.report("**               Training script                **")
 _fn.report("**************************************************")
 _fn.todolist()
 
+# ------------------------- INIT -------------------------
+parser = argparse.ArgumentParser()
+parser.add_argument('--wandb',
+                    action='store_true',
+                    default=False,
+                    help='sync with W&B')
+parser.add_argument('--resume',
+                    action='store_true',
+                    default=False,
+                    help='resume run')
+parser.add_argument(
+    '--config',
+    action='store',
+    default='configs.resnet007',
+    help='config filename (including path) imported as module, \
+        defaults to configs.default')
+args = parser.parse_args()
+RESUME, WANDB, cfg_path = args.resume, args.wandb, args.config
+
+_fn.report(f'Importing configuration from \'{cfg_path}\'')
+CFG = import_module(cfg_path)
+RUN_ID = CFG.RUN_ID
+
+# Generating unqiue hash for the training run
+if not RESUME:
+    RUN_ID = _fn.get_random_hash()
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = str(CFG.GPU_ID)
+
+if RESUME:
+    checkpoint = torch.load(CFG.CHECKPOINTFILENAME)
+
+# Fixing seed for reproducibility
+_fn.fix_seed(1)
+
+if WANDB:
+    if RESUME:
+        print(
+            f'Your run id is {RUN_ID} with checkpoint {CFG.CHECKPOINTFILENAME}'
+        )
+        input("Press any key if you want to continue >>")
+        wprj = wandb.init(id=RUN_ID,
+                          project=CFG.WANDBPROJECTNAME,
+                          resume="must")
+    else:
+        wprj = wandb.init(project=CFG.WANDBPROJECTNAME, resume=False)
+        RUN_ID = wprj.id
+
 if torch.cuda.is_available():
     device = torch.device("cuda:0")
 else:
     device = torch.device("cpu")
 _fn.report("Torch is using device:", device)
 
+Model = getattr(import_module(CFG.MODEL_LIBRARY_PATH), CFG.MODEL_NAME)
 model = Model()
+
 model.float()
 if torch.cuda.is_available():
     model.cuda()
 _fn.report("Model created")
 
-torchinfo.summary(model, (32, 1, 64, 192))
+if CFG.TORCHINFO_SHAPE is not None:
+    torchinfo.summary(model, CFG.TORCHINFO_SHAPE)
 
 if RESUME:
     model.load_state_dict(checkpoint['state_dict'])
     _fn.report("Model state dict loaded from checkpoint")
 
-#optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9)
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9)
+#optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 _fn.report("Optimizer initialized")
 
 #if RESUME:
 #    optimizer.load_state_dict(checkpoint['optimizer'])
 #    _fn.report("Optimizer state dict loaded from checkpoint")
 
-D = Dataset(filename=os.path.join(DATASET_DIR, DATASET_TRAIN),
-            cache_path=SPECTROGRAMS_CACHE)
-V = Dataset(filename=os.path.join(DATASET_DIR, DATASET_VALIDATE),
-            cache_path=SPECTROGRAMS_CACHE)
+D = Dataset(filename=os.path.join(CFG.DATASET_DIR, CFG.DATASET_TRAIN),
+            cache_path=CFG.SPECTROGRAMS_CACHE)
+V = Dataset(filename=os.path.join(CFG.DATASET_DIR, CFG.DATASET_VALIDATE),
+            cache_path=CFG.SPECTROGRAMS_CACHE)
 _fn.report("Full train and validation datasets loaded")
 
 ########################################################
@@ -112,7 +110,7 @@ if RESUME:
     initial_epoch = int(checkpoint['epoch']) + 1
     _fn.report("Initial epoch set to", initial_epoch)
 
-criterion = _losses.CustomTripletMarginLoss(MARGIN)
+criterion = _losses.CustomTripletMarginLoss(CFG.MARGIN)
 
 # Pre-generate triplet sets based on Spectogram class
 # We have
@@ -127,22 +125,22 @@ criterion = _losses.CustomTripletMarginLoss(MARGIN)
 if WANDB:
     wandb.watch(model)
 
-top1 = checkpoint['top1'] if RESUME and 'top1' in checkpoint.keys() else []
+top1 = 0
+#top1 = checkpoint['top1'] if RESUME and 'top1' in checkpoint.keys() else 0
 
-for epoch in range(initial_epoch, EPOCHS_TOTAL):
-    _fn.report("**************** Epoch", epoch, "out of", EPOCHS_TOTAL,
+lss = _losses.Losses()
+for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
+    _fn.report("**************** Epoch", epoch, "out of", CFG.EPOCHS_TOTAL,
                "****************")
 
     # gc.collect()
-
     triplets_generated_per_epoch = 0
-    epoch_losses = []
     _fn.report("-------------- Training ----------------")
-    _fn.report(f'Generating subsets with {SUBSET_SPEAKERS} speakers')
-    for batch_speakers in D.speakers_iterator(SUBSET_SPEAKERS, True):
+    _fn.report(f'Generating subsets with {CFG.SUBSET_SPEAKERS} speakers')
+    for batch_speakers in D.speakers_iterator(CFG.SUBSET_SPEAKERS, True):
         Dsub = D.get_randomized_subset(
             speakers_filter=batch_speakers,
-            max_records=SUBSET_SPECTROGRAMS_PER_SPEAKER)
+            max_records=CFG.SUBSET_SPECTROGRAMS_PER_SPEAKER)
 
         _fn.report("Updating embeddings")
         model.eval()
@@ -152,15 +150,15 @@ for epoch in range(initial_epoch, EPOCHS_TOTAL):
         _fn.report("Generating triplets")
         Dsub.reset()
         anchors, positives, negatives = _tpl.generate_triplets_mp(
-            Dsub, TRIPLETSPERCLASS, POSITIVECRITERION, NEGATIVESEMIHARD,
-            NEGATIVEHARD)
+            Dsub, CFG.TRIPLETSPERCLASS, CFG.POSITIVECRITERION,
+            CFG.NEGATIVESEMIHARD, CFG.NEGATIVEHARD)
 
         _fn.report(f'Triplets generated: {len(anchors)}')
         triplets_generated_per_epoch += len(anchors)
 
         _fn.report("Training cycle")
         model_params = {
-            'batch_size': BATCH_SIZE,
+            'batch_size': CFG.BATCH_SIZE,
             'shuffle': True,
             'num_workers': 0
         }
@@ -175,8 +173,8 @@ for epoch in range(initial_epoch, EPOCHS_TOTAL):
                                           device=device,
                                           criterion=criterion)
         _fn.report(f'Loss: {np.mean(losses):.4f}')
-        epoch_losses.extend(losses)
-    _fn.report(f'Epoch loss: {np.mean(epoch_losses):.4f}')
+        lss.append(losses, epoch)
+    _fn.report(f'Epoch loss: {lss.mean(epoch):.4f}')
     """
     _fn.report("-------------- Visualization ----------------")
     if epoch > 0 and epoch % 1 == 0:
@@ -194,7 +192,7 @@ for epoch in range(initial_epoch, EPOCHS_TOTAL):
 
     if WANDB:
         wandb.log({
-            "Loss": np.mean(epoch_losses),
+            "Loss": lss.mean(epoch),
             "Top1 acc over training data": top1train,
             "Top5 acc over training data": top5train,
             "Top1 acc over validation data": top1val,
@@ -209,19 +207,15 @@ for epoch in range(initial_epoch, EPOCHS_TOTAL):
     ##########################################################
     ##### Saving checkpoint if validation accuracy improved
     ##########################################################
-    top1.append(top1val)
-    if top1[-1] > np.max(top1[:-1], initial=0):
-        chkptfname = "./checkpoints/" + __run_hash + "_epoch_" + str(
-            epoch).zfill(2) + ".dict"
-        torch.save(
-            {
-                'epoch': epoch,
-                'state_dict': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'top1': top1
-            }, chkptfname)
-        _fn.report(f'Checkpoint {chkptfname} saved')
-    if _fn.early_stop(top1, criterion='max'):
-        print("No validation progress detected or requested to stop, stopping")
-        _fn.cleanup(run_id=__run_hash)
-        sys.exit(1)
+    if top1val > top1:
+        top1 = top1val
+        _fn.checkpoint(id=RUN_ID,
+                       data={
+                           'epoch': epoch,
+                           'state_dict': model.state_dict(),
+                           'optimizer': optimizer.state_dict(),
+                           'top1': top1
+                       })
+    if _fn.early_stop(lss.mean_per_epoch(), criterion='min'):
+        print("Early stop triggered")
+        sys.exit(0)
