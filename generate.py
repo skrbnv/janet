@@ -4,16 +4,25 @@ from libs.data import Dataset
 import os
 from cv2 import resize
 import multiprocessing as mp
+from datetime import datetime
 #import soundfile as sf
 #import librosa
+
+
+def time(message=""):
+    pass
+    #print(datetime.utcnow().isoformat(sep=' ', timespec='milliseconds'), ":",
+    #      message)
+
+
 '''
 MEDIA_DIR = "/media/my3bikaht/EXT4/datasets/TIMIT2/sorted/train"
 DATASET_TARGET = "/media/my3bikaht/EXT4/datasets/TIMIT2/datasets/glued-2s-mel80-tokenized-plain-train.dt"
 SPECTROGRAMS_CACHE = "/media/my3bikaht/EXT4/datasets/TIMIT2/cache/glued-2s-mel80-tokenized-plain"
 '''
-MEDIA_DIR = "/media/my3bikaht/EXT4/datasets/vctk/sorted/train"
-DATASET_TARGET = "/media/my3bikaht/EXT4/datasets/vctk/datasets/glued-1_92s-mel64-tokenized-plain-train.dt"
-SPECTROGRAMS_CACHE = "/media/my3bikaht/EXT4/datasets/vctk/cache/glued-1_92s-mel64-tokenized-plain"
+MEDIA_DIR = "/media/sergey/3Tb1/datasets/datasets/ambient_noises/raw"
+DATASET_TARGET = "/media/sergey/3Tb1/datasets/datasets/ambient_noises/ambient.dt"
+SPECTROGRAMS_CACHE = "/media/sergey/3Tb1/datasets/datasets/ambient_noises/cache"
 
 MUSICLIBDIR = "/home/my3bikaht/datasets/music-genres-kaggle/Data/genres_original"
 AMBIENTLIBDIR = "/home/my3bikaht/datasets/ambient_noises"
@@ -21,15 +30,15 @@ AMBIENTLIBDIR = "/home/my3bikaht/datasets/ambient_noises"
 FORCE_SHAPE = False
 FORCE_SHAPE_SIZE = (224, 224)
 
-SLICE_MS = 192
+SLICE_MS = 1920
 STEP_MS = 100
 MEL_BANKS = 64
-TRIM_MS = 0
+TRIM_MS = 100
 # number of milliseconds to trim
 # from the start and end of the
 # record. Problem of voxceleb dataset
 
-SLICING_STRATEGY = 'tokenize'
+SLICING_STRATEGY = 'glue'
 # 'glue' non-silent parts into one then slice or
 # 'tokenize' - glue with tokens of removed silence inserted in between or
 # 'pad' each part and slice each one
@@ -67,9 +76,9 @@ RANDOMSHIFTS = 3
 
 #SPECTROGRAMS#
 MAX_SPEAKERS = 6000
-MAX_SAMPLES_PER_SPEAKER = 100
-MAX_SPECTROGRAMS_PER_SAMPLE = 100
-PICK_RANDOM_SPECTROGRAMS = False
+MAX_SAMPLES_PER_SPEAKER = 20
+MAX_SPECTROGRAMS_PER_SAMPLE = 5
+PICK_RANDOM_SPECTROGRAMS = True
 
 
 def multiprocess_sample(sample):
@@ -176,6 +185,11 @@ _fn.report(f'Dataset target: {DATASET_TARGET}')
 _fn.report(f'Cache dir: {SPECTROGRAMS_CACHE}')
 _fn.report(f'Slice size, ms {SLICE_MS}')
 _fn.report(f'Step size, ms {STEP_MS}')
+_fn.report(f'Using up to {MAX_SAMPLES_PER_SPEAKER} samples per speaker')
+_fn.report(
+    f'   with up to {MAX_SPECTROGRAMS_PER_SAMPLE} spectrograms per sample')
+_fn.report(f'   for up to {MAX_SPEAKERS} speakers,')
+_fn.report(f'   randomly selected (?): {PICK_RANDOM_SPECTROGRAMS}')
 _fn.report(f'Melbanks: {MEL_BANKS}')
 _fn.report(f'Trimming audio, ms: {TRIM_MS}')
 _fn.report(f'Skipping first frame: {SKIPFIRSTFRAME}')
@@ -207,8 +221,10 @@ pool = mp.Pool(mp.cpu_count())
 for i, folder in enumerate(folders):
     _fn.report("Processing speaker", os.path.basename(folder), ":", (i + 1),
                "out of", len(folders))
+    time("loop start")
     speaker = os.path.basename(folder)
     samples = _fn.raw_audio_by_dir(folder, MAX_SAMPLES_PER_SPEAKER)
+    time("raw audio loaded")
     if len(samples) > 0:
         #for sample in samples:
         #	mp_results = multiprocess_sample(sample)
@@ -219,6 +235,7 @@ for i, folder in enumerate(folders):
         _fn.report("Unable to generate spectrograms (too short) for speaker",
                    speaker)
     else:
+        time("spectrograms generated")
         for results in mp_results:
             if results is not None:
                 for result in results:
@@ -232,6 +249,7 @@ for i, folder in enumerate(folders):
                         'selected': False,
                         'embedding': None
                     })
+    time("spectrograms saved")
     with open('processed.log', 'a') as f:
         f.write(f'{speaker}, {i}\n')
 D.save(DATASET_TARGET)

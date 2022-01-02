@@ -10,9 +10,7 @@ def train_loop(loader, model, optimizer, criterion, device, augmentation,
     losses = []
     for inputs, labels in tqdm(loader):
         optimizer.zero_grad()
-        if augmentation == 'erase':
-            bi, bl = _aug.erase(inputs.to(device), labels.to(device))
-        elif augmentation == 'mixup':
+        if augmentation == 'mixup':
             bi, bl = _aug.mixup(
                 inputs.to(device),
                 torch.nonzero(labels, as_tuple=True)[1].to(device))
@@ -20,15 +18,26 @@ def train_loop(loader, model, optimizer, criterion, device, augmentation,
             bi, bl = _aug.cutmix(
                 inputs.to(device),
                 torch.nonzero(labels, as_tuple=True)[1].to(device))
-        elif augmentation == 'scale':
-            bi, bl = _aug.scale(inputs.to(device), labels.to(device))
+        elif augmentation == 'erase':
+            bi, bl = _aug.erase(inputs.to(device), labels.to(device))
+        elif augmentation == 'pitch_shift':
+            bi, bl = _aug.pitch_shift(inputs.to(device), labels.to(device))
+        elif augmentation == 'speed':
+            bi, bl = _aug.speed(inputs.to(device), labels.to(device))
+        elif augmentation == 'volume':
+            bi, bl = _aug.volume(inputs.to(device), labels.to(device))
+        elif augmentation == 'contrast':
+            bi, bl = _aug.contrast(inputs.to(device), labels.to(device))
+        elif augmentation == 'equalize':
+            bi, bl = _aug.equalize(inputs.to(device), labels.to(device))
         else:
             bi, bl = inputs.to(device), labels.to(device)
         y_pred = model(bi)
         loss = criterion(y_pred, bl)
         losses.append(loss.item())
         loss.backward()
-        torch.nn.utils.clip_grad_norm(model.parameters(), max_norm=2)
+        if clipping:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=2)
         optimizer.step()
     return losses
 

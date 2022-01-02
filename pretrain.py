@@ -35,7 +35,7 @@ parser.add_argument('--resume',
 parser.add_argument(
     '--config',
     action='store',
-    default='configs.resnet008',
+    default='configs.resnet009',
     help='config filename (including path) imported as module, \
         defaults to configs.default')
 args = parser.parse_args()
@@ -139,7 +139,7 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
                         optimizer,
                         criterion,
                         device,
-                        augmentations=['erase', 'mixup', 'cutmix', 'gradclip'])
+                        augmentations=['equalize', 'gradclip'])
     lss.append(losses, epoch)
     _fn.report(f'Epoch loss: {lss.mean(epoch):.4f}')
     """

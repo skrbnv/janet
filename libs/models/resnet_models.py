@@ -224,11 +224,11 @@ class ResNet10_64x192_kernel5(nn.Module):
         self.basemodel.conv1 = nn.Sequential(
             nn.Conv2d(1,
                       64,
-                      kernel_size=(11, 5),
+                      kernel_size=5,
                       stride=(1, 3),
-                      padding=(5, 2),
+                      padding=2,
                       bias=False))
-        self.basemodel.fc = nn.Linear(512, 630)
+        self.basemodel.fc = nn.Linear(512, 5994)
 
     def forward(self, n):
         n = self.innerModel(n)
@@ -289,7 +289,7 @@ class ResNet6_64x192_kernel5(nn.Module):
         # .unsqueeze(1).broadcast_to(x.shape[0], 3, x.shape[1], x.shape[2]))
 
 
-class ResNet10_64x192_kernel5_dropout(nn.Module):
+class ResNet10_64x192_kernel5_dropout_what(nn.Module):
     def __init__(self):
         super().__init__()
         self.basemodel = _resnet('resnet10',
