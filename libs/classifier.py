@@ -6,18 +6,20 @@ import libs.augmentations as _aug
 
 
 def train_loop(loader, model, optimizer, criterion, device, augmentation,
-               clipping):
+               clipping, num_classes):
     losses = []
     for inputs, labels in tqdm(loader):
         optimizer.zero_grad()
         if augmentation == 'mixup':
             bi, bl = _aug.mixup(
                 inputs.to(device),
-                torch.nonzero(labels, as_tuple=True)[1].to(device))
+                torch.nonzero(labels, as_tuple=True)[1].to(device),
+                num_classes)
         elif augmentation == 'cutmix':
             bi, bl = _aug.cutmix(
                 inputs.to(device),
-                torch.nonzero(labels, as_tuple=True)[1].to(device))
+                torch.nonzero(labels, as_tuple=True)[1].to(device),
+                num_classes)
         elif augmentation == 'erase':
             bi, bl = _aug.erase(inputs.to(device), labels.to(device))
         elif augmentation == 'pitch_shift':
@@ -30,6 +32,8 @@ def train_loop(loader, model, optimizer, criterion, device, augmentation,
             bi, bl = _aug.contrast(inputs.to(device), labels.to(device))
         elif augmentation == 'equalize':
             bi, bl = _aug.equalize(inputs.to(device), labels.to(device))
+        elif augmentation == 'whitenoise':
+            bi, bl = _aug.whitenoise(inputs.to(device), labels.to(device))
         else:
             bi, bl = inputs.to(device), labels.to(device)
         y_pred = model(bi)
@@ -42,7 +46,15 @@ def train_loop(loader, model, optimizer, criterion, device, augmentation,
     return losses
 
 
-def train(train_loader, model, optimizer, criterion, device, augmentations=[]):
+def train(train_loader,
+          model,
+          optimizer,
+          criterion,
+          device,
+          num_classes,
+          augmentations=None):
+    if augmentations is None:
+        augmentations = []
     augms = ['unchanged']
     augms.extend(augmentations)
     if 'gradclip' in augms:
@@ -57,7 +69,7 @@ def train(train_loader, model, optimizer, criterion, device, augmentations=[]):
     for augm in augms:
         losses.extend(
             train_loop(train_loader, model, optimizer, criterion, device, augm,
-                       grad_clip))
+                       grad_clip, num_classes))
     return losses
 
 

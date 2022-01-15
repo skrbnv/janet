@@ -16,3 +16,4 @@ visualization/
 checkpoints/
 wandb/
 cache/
+records/

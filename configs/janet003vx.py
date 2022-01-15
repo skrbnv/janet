@@ -13,14 +13,15 @@ DATASET_TEST = "TIMIT-test.dt"
 TRAIN_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/double/cache/train/"
 VALIDATE_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/double/cache/validate/"
 TORCHINFO_SHAPE = (64, 1, 64, 192)  # shape or None
+
 # MODEL
-MODEL_LIBRARY_PATH = 'libs.models.resnet_v7'
-MODEL_NAME = 'Model_v7_ex_v6f'
+MODEL_LIBRARY_PATH = 'libs.models.janet'
+MODEL_NAME = 'Janet'
 # VISUALIZATION
 VIZ_DIR = "./visualization/"
 # CHECKPOINTS
-RUN_ID = 'm65ylvst'
-CHECKPOINTFILENAME = "./checkpoints/m65ylvst011.dict"
+RUN_ID = '2qzvq9i4'
+CHECKPOINTFILENAME = "./checkpoints/2qzvq9i4057.dict"
 # SUBSETS
 USE_SUBSETS = True
 SUBSET_SPEAKERS = 64

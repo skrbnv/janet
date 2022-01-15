@@ -9,30 +9,133 @@ import os
 import itertools
 import gc
 from torch.utils.data import Dataset as UtilsDataset
-# import psutil
+from torch.utils.data import DataLoader
+import psutil
+import shutil
+
+
+def cache_write(id, arr, cache=None):
+    if cache is None:
+        raise IOError('Missing cache path, cannot read data')
+    if not os.path.isdir(cache):
+        input('Cache directory doesn\'t exist. Press any key to create >> ')
+        _fn.mkdir17(cache)
+    storages = [f.path for f in os.scandir(cache) if f.is_dir()]
+    if len(storages) == 0:
+        sp = os.path.join(cache, f'{(1):010d}')
+        _fn.mkdir17(sp)
+        storages = [sp]
+    latest_storage = max(storages, key=os.path.basename)
+    count = len(os.listdir(latest_storage))
+    if count < 10000:
+        current_storage = latest_storage
+    else:
+        current_storage = os.path.join(cache, f'{(len(storages)+1):010d}')
+        _fn.mkdir17(current_storage)
+    try:
+        with open(os.path.join(current_storage, id), 'wb') as f:
+            np.save(f, arr)
+    except Exception as e:
+        raise Exception(
+            f'Error while trying to save spectrogram {id} to {current_storage}, {e.args}'
+        )
+    return True
+
+
+class FileStorageIndex():
+    def __init__(self, path) -> None:
+        self.path = path
+        self.storages = None
+        self.outdated = False
+        self.data = {}
+        self.rescan()
+
+    def rescan(self):
+        self.storages = [f.path for f in os.scandir(self.path) if f.is_dir()]
+        for storage in self.storages:
+            for f in os.listdir(storage):
+                if not os.path.isdir(os.path.join(self.path, storage, f)):
+                    self.data[f] = os.path.join(self.path, storage, f)
+
+    def where(self, key):
+        return self.data[key]
+
+    def __len__(self):
+        return len(self.data)
+
+
+class MemCache():
+    def __init__(self) -> None:
+        self.data = {}
+        self.allow = True
+        self.spare_writes = 0
+        self.request_for_writes()
+
+    def request_for_writes(self):
+        memfree = psutil.virtual_memory().available - 2**33
+        if memfree <= 0:
+            self.allow = False
+            return False
+        else:
+            self.allow = True
+            self.spare_writes = 100
+            return True
+
+    def append(self, key, obj):
+        if self.allow is True:
+            if self.spare_writes <= 0:
+                if not self.request_for_writes():
+                    return False
+            self.spare_writes -= 1
+            self.data[key] = obj
+            return True
+        else:
+            return False
+
+    def get(self, key):
+        if key in self.data:
+            return self.data[key]
+        else:
+            return None
 
 
 class Dataset(UtilsDataset):
-    def __init__(self, data=None, filename=None, cache_path=None):
+    def __init__(self, cache_path, data=None, filename=None, force_even=False):
         if data is not None and filename is not None:
             raise Exception(
                 'Cannot create dataset with both data and filename passed as parameters'
             )
+
+        self.cache_path = cache_path
+        self.report = print
+        self.dm = None
+        self.speakers = None
         if data is None:
             self.data = {}
         else:
             self.data = data
+            if force_even:
+                self.make_even()
+            self.speakers = self.get_unique_speakers()
+        self.fileindex = FileStorageIndex(path=self.cache_path)
         if filename is not None:
-            self.data = self.load(filename)
-        self.cache_path = cache_path
-        self.report = print
-        self.dm = None
-        self.speakers = self.get_unique_speakers()
+            self.load(filename)
+            self.make_even()
+            self.speakers = self.get_unique_speakers()
+        self.memcache = MemCache()
+
+    def make_even(self):
+        if len(self.data) % 2 == 1:
+            self.data.popitem()
+            return True
+        else:
+            return False
 
     def load(self, filename):
         with open(filename, 'rb') as handle:
             self.data = pickle.load(handle)
-        return self.data
+        #self.fileindex.rescan()
+        return True
 
     def save(self, filename):
         if filename is None:
@@ -44,7 +147,7 @@ class Dataset(UtilsDataset):
         if os.path.isfile(filename):
             while True:
                 response = input(
-                    "File already exists. Do you want to overwrite it? (Y/n)"
+                    f'Dataset file ({filename}) already exists. Do you want to overwrite it? (Y/n)'
                 ).lower()
                 if response == 'y':
                     break
@@ -55,76 +158,54 @@ class Dataset(UtilsDataset):
             pickle.dump(self.data, handle, protocol=pickle.HIGHEST_PROTOCOL)
         return True
 
-    def update_routine(self):
-        self.speakers = self.get_unique_speakers()
-
     def append(self, record):
-        pos = len(self.data)
+        pos = self.__len__()
         self.data[pos] = record
         self.data[pos]['_id'] = pos
-        self.update_routine()
+        self.speakers = None
+        self.fileindex.outdated = True
         return True
 
     def encode_speaker_one_hot(self, speaker):
-        output = np.zeros(len(self.speakers))
+        speakers = self.get_unique_speakers()
+        output = np.zeros(len(speakers))
         try:
-            spk_idx = self.speakers.index(speaker)
+            spk_idx = speakers.index(speaker)
         except Exception:
             return None
         output[spk_idx] = 1
         return output
 
     def encode_speaker_index(self, speaker):
+        speakers = self.get_unique_speakers()
         try:
-            spk_idx = self.speakers.index(speaker)
+            spk_idx = speakers.index(speaker)
             return spk_idx
         except Exception:
             return None
 
-    def cache_write(self, id, arr, cache=None):
-        if cache is None:
-            if self.cache_path is None:
-                raise IOError('Missing cache path, cannot read data')
-            else:
-                cache = self.cache_path
-        if not os.path.isdir(cache):
-            input(
-                'Cache directory doesn\'t exist. Press any key to create >> ')
-            os.mkdir(cache)
-        storages = [f.path for f in os.scandir(cache) if f.is_dir()]
-        if len(storages) == 0:
-            sp = os.path.join(cache, f'{(1):010d}')
-            os.mkdir(sp)
-            storages = [sp]
-        latest_storage = max(storages, key=os.path.basename)
-        count = len(os.listdir(latest_storage))
-        if count < 10000:
-            current_storage = latest_storage
-        else:
-            current_storage = os.path.join(cache, f'{(len(storages)+1):010d}')
-            os.mkdir(current_storage)
-        with open(os.path.join(current_storage, id), 'wb') as f:
-            np.save(f, arr)
-        return True
+    def cache_write(self, id, obj):
+        self.fileindex.outdated = True
+        return cache_write(id, obj, cache=self.cache_path)
 
-    def cache_read(self, id, cache=None):
-        if cache is None:
-            if self.cache_path is None:
-                raise IOError('Missing cache path, cannot read data')
-            else:
-                cache = self.cache_path
-        storages = [f.path for f in os.scandir(cache) if f.is_dir()]
-        for storage in storages:
-            if os.path.isfile(os.path.join(storage, id)):
-                with open(os.path.join(storage, id), 'rb') as f:
-                    try:
-                        arr = np.load(f)
-                    except Exception as e:
-                        raise IOError(
-                            f'Encountered exception when trying to read file {os.path.join(storage, id)}, exception message: {e}'
-                        )
-                return arr  # np.squeeze(arr, axis=0)  # .T
-        raise Exception("No such file")
+    def cache_read(self, id):
+        # scan filesystem on first start
+        if self.fileindex.outdated is True:
+            self.fileindex.rescan()
+        # if we already have object cached return it
+        cached = self.memcache.get(id)
+        if cached is not None:
+            return self.memcache.get(id)
+        # or lookup on filesystem
+        with open(self.fileindex.where(id), 'rb') as f:
+            try:
+                arr = np.load(f)
+            except Exception as e:
+                raise IOError(
+                    f'Encountered exception when trying to read file {self.fileindex.where(id)}, exception message: {e}'
+                )
+        self.memcache.append(id, arr)
+        return arr  # np.squeeze(arr, axis=0)  # .T
 
     def trimmed(self, batch_size, procs=2):
         '''
@@ -145,8 +226,11 @@ class Dataset(UtilsDataset):
             return dict(itertools.islice(self.data.items(), D_len - i))
 
     def get_unique_speakers(self):
-        speakers = set(el['speaker'] for el in self.data.values())
-        return list(speakers)
+        if self.speakers is not None:
+            return self.speakers
+        else:
+            speakers = set(el['speaker'] for el in self.data.values())
+            return sorted(list(speakers))
 
     def get_speakers_subset(self, max_speakers=None, shuffle=True):
         speakers = self.get_unique_speakers()
@@ -156,12 +240,6 @@ class Dataset(UtilsDataset):
 
     def available(self):
         return sum(el['selected'] is False for el in self.data.values())
-
-    def count(self):
-        return self.__len__()
-
-    length = count
-    total = count
 
     def flag_selected(self, id):
         if self.data[id]['selected'] is True:
@@ -403,7 +481,7 @@ class Dataset(UtilsDataset):
 
     def get_randomized_subset_with_augmentation(self,
                                                 max_records,
-                                                speakers_filter=[],
+                                                speakers_filter,
                                                 augmentations_filter=[]):
         # adding sorted just in case order follows initial order during creation,
         # when same speaker records were added sequentially
@@ -435,7 +513,7 @@ class Dataset(UtilsDataset):
                 current_speaker = value['speaker']
         return Dataset(data=output, cache_path=self.cache_path)
 
-    def get_randomized_subset(self, max_records, speakers_filter=[]):
+    def get_randomized_subset(self, max_records, speakers_filter):
         return self.get_randomized_subset_with_augmentation(
             speakers_filter=speakers_filter,
             augmentations_filter=[],
@@ -466,6 +544,10 @@ class Dataset(UtilsDataset):
     def __len__(self):
         return len(self.data)
 
+    count = __len__
+    length = __len__
+    total = __len__
+
     def __getitem__(self, index, process_label=1):
         '''
         process_label = 0: Do not process
@@ -480,3 +562,66 @@ class Dataset(UtilsDataset):
         else:
             label = self.data[index]['speaker']
         return input, label
+
+
+def cache_validate(id, cache):
+    storages = [f.path for f in os.scandir(cache) if f.is_dir()]
+    for storage in storages:
+        if os.path.isfile(os.path.join(storage, id)):
+            return True
+    else:
+        return False
+
+
+def merge_cache(primary, relocated):
+    relocated_storages = [d.path for d in os.scandir(relocated) if d.is_dir()]
+    for i, relocated_storage in enumerate(relocated_storages):
+        print(f'Merging caches, batch {i+1} out of {len(relocated_storages)}')
+        filelist = os.listdir(relocated_storage)
+        for file in filelist:
+            primary_storages = [
+                d.path for d in os.scandir(primary) if d.is_dir()
+            ]
+            latest_primary_storage = max(primary_storages,
+                                         key=os.path.basename)
+            count = len(os.listdir(latest_primary_storage))
+            if count < 10000:
+                target_storage = latest_primary_storage
+            else:
+                target_storage = os.path.join(
+                    primary, f'{(len(primary_storages)+1):010d}')
+                try:
+                    os.mkdir(target_storage)
+                except Exception as e:
+                    raise Exception(
+                        f'Cannot create directory {target_storage} {e.args}')
+            shutil.move(os.path.join(relocated_storage, file),
+                        os.path.join(target_storage, file))
+    #input("Press enter to delete folders in secondary cache")
+    for rf in relocated_storages:
+        shutil.rmtree(rf)
+
+
+def cache_summary(cache):
+    storages = [d.path for d in os.scandir(cache) if d.is_dir()]
+    total = sum([len(os.listdir(st)) for st in storages])
+    return total
+
+
+def save_records(speaker, records, D):
+    ''' Shortcut for saving list of records into Dataset '''
+    if records is not None:
+        for record in records:
+            D.append({
+                'speaker': speaker,
+                'sample': record['sample'],
+                'position': record['position'],
+                'cacheId': record['cacheId'],
+                'augmentation': record['augmentation'],
+                'segments': record['segments'],
+                'rms': record['rms'],
+                'selected': False,
+                'embedding': None
+            })
+    else:
+        print(f'No records returned for speaker {speaker}, skipping')

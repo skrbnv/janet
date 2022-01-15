@@ -1,31 +1,53 @@
-import numpy as np
+#import enum
+#import numpy as np
 import libs.functions as _fn
-from libs.data import Dataset
+#import libs.spg_cached_writes as _cw
+from libs.data import Dataset, cache_validate, merge_cache, save_records, cache_summary
 import os
-from cv2 import resize
-import multiprocessing as mp
-from datetime import datetime
+#import cv2
+import pickle
+from multiprocessing import Pool, cpu_count
+#from datetime import datetime
 #import soundfile as sf
 #import librosa
+##import librosa.display
+#import matplotlib.pyplot as plt
+#import soundfile as sf
+import time
+#import random
+import argparse
+import libs.multiprocessing as _mp
 
-
-def time(message=""):
-    pass
-    #print(datetime.utcnow().isoformat(sep=' ', timespec='milliseconds'), ":",
-    #      message)
-
-
+parser = argparse.ArgumentParser()
+parser.add_argument('--resume',
+                    action='store_true',
+                    default=False,
+                    help='continue generating spectrograms')
+parser.add_argument('--validate',
+                    action='store_true',
+                    default=False,
+                    help='validate results during generation')
+parser.add_argument('--assemble',
+                    action='store_true',
+                    default=False,
+                    help='assemble generated speakers into dataset')
+args = parser.parse_args()
+RESUME = args.resume
+VALIDATE_RESULTS = args.validate
+ASSEMBLE = args.assemble
 '''
 MEDIA_DIR = "/media/my3bikaht/EXT4/datasets/TIMIT2/sorted/train"
 DATASET_TARGET = "/media/my3bikaht/EXT4/datasets/TIMIT2/datasets/glued-2s-mel80-tokenized-plain-train.dt"
-SPECTROGRAMS_CACHE = "/media/my3bikaht/EXT4/datasets/TIMIT2/cache/glued-2s-mel80-tokenized-plain"
+PRIMARY_CACHE = "/media/my3bikaht/EXT4/datasets/TIMIT2/cache/glued-2s-mel80-tokenized-plain"
 '''
-MEDIA_DIR = "/media/sergey/3Tb1/datasets/datasets/ambient_noises/raw"
-DATASET_TARGET = "/media/sergey/3Tb1/datasets/datasets/ambient_noises/ambient.dt"
-SPECTROGRAMS_CACHE = "/media/sergey/3Tb1/datasets/datasets/ambient_noises/cache"
-
-MUSICLIBDIR = "/home/my3bikaht/datasets/music-genres-kaggle/Data/genres_original"
-AMBIENTLIBDIR = "/home/my3bikaht/datasets/ambient_noises"
+MEDIA_DIR = "/mnt/nvme2tb/datasets/voxceleb2/sorted/train"
+DATASET_TARGET = "/mnt/nvme2tb/datasets/voxceleb2/double/datasets/train.dt"
+PRIMARY_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/double/cache"
+AUXILLARY_CACHE = "/media/sergey/386217cc-3490-42e9-b723-c3a32cc41f1f/tmp/quick-train"
+RECORDS_DUMP = './records/train'
+# AUXILLARY_CACHE is a temp cache on second disk drive to increase number of IO ops
+# RECORDS_DUMP, if exists, defines temp location to store records due to delays if
+# we sync adding records to single dataset
 
 FORCE_SHAPE = False
 FORCE_SHAPE_SIZE = (224, 224)
@@ -49,130 +71,11 @@ SKIPFIRSTFRAME = False
 # Do not add first frame to set due to
 # a lot of examples ending up in outliers
 
-# Add white noise to sound during generation
-ADDWHITENOISE = False
-SNR_OPTIONS = [15]
-
-# Add time stretch to sound during generation
-ADDTIMESTRETCH = False
-TS_OPTIONS = [1.2, 0.8]
-
-# Add pitch shift to sound during generation
-ADDPITCHSHIFT = False
-PS_OPTIONS = [-2, 3]
-
-# Add music to sound during generation
-ADDMUSIC = False
-MUS_OPTIONS = [7]
-
-# Add ambient to sound during generation
-ADDAMBIENT = False
-AMB_OPTIONS = [7]
-
-# Add number of random shifts for non-zero content
-# (only applicable this slice was padded with zeros)
-ADDRANDOMSHIFT = False
-RANDOMSHIFTS = 3
-
 #SPECTROGRAMS#
 MAX_SPEAKERS = 6000
-MAX_SAMPLES_PER_SPEAKER = 20
-MAX_SPECTROGRAMS_PER_SAMPLE = 5
+MAX_SAMPLES_PER_SPEAKER = 50
+MAX_SPECTROGRAMS_PER_SAMPLE = 10
 PICK_RANDOM_SPECTROGRAMS = True
-
-
-def multiprocess_sample(sample):
-    # For each sample (file) let's generate
-    # set of spectrograms based on length and steps
-    #audioEmpzd = _fn.preemphasize(sample[1])
-    audioEmpzd = sample[1]
-    spectrograms = _fn.generate_slices(audioEmpzd,
-                                       length=SLICE_MS / 1000,
-                                       sr=16000,
-                                       step=STEP_MS / 1000,
-                                       trim=TRIM_MS / 1000,
-                                       strategy=SLICING_STRATEGY,
-                                       min_len=SKIPSHORTSLICES,
-                                       n_mels=MEL_BANKS,
-                                       augm=0)
-
-    if spectrograms is None:
-        return None
-    '''
-    origin = slices_raw.copy()
-    slices = [(el, 0) for el in slices_raw]
-    if ADDWHITENOISE is True:
-        for noise_option in SNR_OPTIONS:
-            whitenoised = []
-            for signal in origin:
-                whitenoised.append((_fn.whitenoise(signal, noise_option), 1))
-            slices.extend(whitenoised)
-    if ADDTIMESTRETCH is True:
-        for ts_option in TS_OPTIONS:
-            timestretched = []
-            for signal in origin:
-                timestretched.append((_fn.timestretch(signal, ts_option), 2))
-            slices.extend(timestretched)
-    if ADDPITCHSHIFT is True:
-        for ps_option in PS_OPTIONS:
-            pitchshifted = []
-            for signal in origin:
-                pitchshifted.append((_fn.pitchshift(signal,
-                                                    n_steps=ps_option), 3))
-            slices.extend(pitchshifted)
-    if ADDAMBIENT is True:
-        for amb_option in AMB_OPTIONS:
-            addambed = []
-            for signal in origin:
-                addambed.append((_fn.add_ambient(signal, snr=amb_option), 4))
-            slices.extend(addambed)
-    if ADDMUSIC is True:
-        for mus_option in MUS_OPTIONS:
-            addmusiced = []
-            for signal in origin:
-                addmusiced.append((_fn.add_music(signal, snr=mus_option), 5))
-            slices.extend(addmusiced)
-    if ADDRANDOMSHIFT is True:
-        for i in range(RANDOMSHIFTS):
-            addrandomshifted = []
-            for signal in origin:
-                shifted = _fn.add_randomshift(signal)
-                if shifted is not None:
-                    addrandomshifted.append((shifted, 6))
-            slices.extend(addrandomshifted)
-    '''
-    #for i, slice in enumerate(slices):
-    #sf.write(f'./soundcheck/record{i}.ogg', slice, 16000, format='OGG')
-
-    #shuffle slices to be able to pick spectrograms within sample in random order
-    indices = np.arange(len(spectrograms))
-    if PICK_RANDOM_SPECTROGRAMS:
-        np.random.shuffle(indices)
-        spectrograms = [spectrograms[i] for i in indices]
-    inner_counter = 0
-    records = []
-    for (spectrogram, augm), eachindex in zip(spectrograms, indices):
-        if inner_counter == MAX_SPECTROGRAMS_PER_SAMPLE:
-            break
-        spectrogram += 40
-        spectrogram /= 40
-        if FORCE_SHAPE:
-            spectrogram_resized = resize(spectrogram,
-                                         dsize=FORCE_SHAPE_SIZE)[np.newaxis]
-        else:
-            spectrogram_resized = spectrogram[np.newaxis].astype(np.float32)
-
-        cache_id = str(sample[0]) + "_" + str(eachindex.item())
-        records.append({
-            'sample': sample[0],
-            'position': eachindex.item(),
-            'cacheId': cache_id,
-            'spectrogram': spectrogram_resized,
-            'augmentation': augm
-        })
-        inner_counter += 1
-    return records if len(records) > 0 else None
-
 
 _fn.report(" ************************************************** ")
 _fn.report(" **            Spectrograms generation           ** ")
@@ -182,74 +85,148 @@ _fn.report("----------------- CURRENT CONFIG -----------------")
 _fn.report(f'Slicing strategy: {SLICING_STRATEGY}')
 _fn.report(f'Media dir: {MEDIA_DIR}')
 _fn.report(f'Dataset target: {DATASET_TARGET}')
-_fn.report(f'Cache dir: {SPECTROGRAMS_CACHE}')
+_fn.report(f'Cache dir: {PRIMARY_CACHE}')
+_fn.report(f'Auxilary cache dir: {AUXILLARY_CACHE}')
+_fn.report(f'Records temp dump dir: {RECORDS_DUMP}')
 _fn.report(f'Slice size, ms {SLICE_MS}')
 _fn.report(f'Step size, ms {STEP_MS}')
 _fn.report(f'Using up to {MAX_SAMPLES_PER_SPEAKER} samples per speaker')
 _fn.report(
-    f'   with up to {MAX_SPECTROGRAMS_PER_SAMPLE} spectrograms per sample')
+    f'   with up to {MAX_SPECTROGRAMS_PER_SAMPLE} {"_randomly selected_" if PICK_RANDOM_SPECTROGRAMS else ""} spectrograms per sample'
+)
 _fn.report(f'   for up to {MAX_SPEAKERS} speakers,')
-_fn.report(f'   randomly selected (?): {PICK_RANDOM_SPECTROGRAMS}')
 _fn.report(f'Melbanks: {MEL_BANKS}')
 _fn.report(f'Trimming audio, ms: {TRIM_MS}')
 _fn.report(f'Skipping first frame: {SKIPFIRSTFRAME}')
-_fn.report(
-    f'Augmentations: WN: {ADDWHITENOISE}, TS: {ADDTIMESTRETCH} PS: {ADDPITCHSHIFT} MSC: {ADDMUSIC} AMB: {ADDAMBIENT} RND: {ADDRANDOMSHIFT}'
-)
 input("Press any key to continue >> ")
 
+max_processes = cpu_count()
+step = max_processes * 2
 folders = [f.path for f in os.scandir(MEDIA_DIR) if f.is_dir()]
 if MAX_SPEAKERS > 0:
     folders = folders[:MAX_SPEAKERS]
-'''
-# This code prints all keys in collection
-# But I can't recall why I added it :)
-map = Code("function() { for (var key in this) { emit(key, null); } }")
-reduce = Code("function(key, stuff) { return null; }")
-result = dbCollectionTrain.map_reduce(map, reduce, "myresults")
-print(result.distinct('_id'))
-'''
-D = Dataset(cache_path=SPECTROGRAMS_CACHE)
-if ADDAMBIENT:
-    _fn.load_ambient_to_memcache(AMBIENTLIBDIR)
-    _fn.report("Loading ambient samples to memory cache completed")
-if ADDMUSIC:
-    _fn.load_music_to_memcache(MUSICLIBDIR)
-    _fn.report("Loading music samples to memory cache completed")
 
-pool = mp.Pool(mp.cpu_count())
-for i, folder in enumerate(folders):
-    _fn.report("Processing speaker", os.path.basename(folder), ":", (i + 1),
-               "out of", len(folders))
-    time("loop start")
-    speaker = os.path.basename(folder)
-    samples = _fn.raw_audio_by_dir(folder, MAX_SAMPLES_PER_SPEAKER)
-    time("raw audio loaded")
-    if len(samples) > 0:
-        #for sample in samples:
-        #	mp_results = multiprocess_sample(sample)
-        mp_results = pool.map(multiprocess_sample, samples)
-    else:
-        _fn.report("No audio examples fit requirements for speaker", speaker)
-    if all([el is None for el in mp_results]):
-        _fn.report("Unable to generate spectrograms (too short) for speaker",
-                   speaker)
-    else:
-        time("spectrograms generated")
-        for results in mp_results:
-            if results is not None:
+D = Dataset(cache_path=PRIMARY_CACHE)
+#cache = _cw.CachedWrites('/media/sergey/3Tb1/cache')
+if RESUME:
+    folders = [
+        f for f in folders
+        if os.path.basename(f) not in _fn.filelist(RECORDS_DUMP)
+    ]
+limit = len(folders)
+config = {
+    'MAX_SAMPLES_PER_SPEAKER': MAX_SAMPLES_PER_SPEAKER,
+    'PRIMARY_CACHE': PRIMARY_CACHE,
+    'AUXILLARY_CACHE': AUXILLARY_CACHE,
+    'RECORDS_DUMP': RECORDS_DUMP,
+    'SLICE_MS': SLICE_MS,
+    'STEP_MS': STEP_MS,
+    'TRIM_MS': TRIM_MS,
+    'MAX_SPECTROGRAMS_PER_SAMPLE': MAX_SPECTROGRAMS_PER_SAMPLE,
+    'SLICING_STRATEGY': SLICING_STRATEGY,
+    'SKIPSHORTSLICES': SKIPSHORTSLICES,
+    'MEL_BANKS': MEL_BANKS,
+    'PICK_RANDOM_SPECTROGRAMS': PICK_RANDOM_SPECTROGRAMS,
+    'FORCE_SHAPE': FORCE_SHAPE,
+    'FORCE_SHAPE_SIZE': FORCE_SHAPE_SIZE,
+}
+if limit > 0:
+    total_expected = 0
+    pool = Pool(processes=max_processes,
+                initializer=_mp.set_affinity_on_worker)
+    for i in range(0, limit, step):
+        results = []
+        for j in range(i, i + step):
+            if j < limit:
+                result = pool.apply_async(_mp.mp_worker,
+                                          (j + 1, folders[j], limit, config))
+                results.append(result)
+        if RECORDS_DUMP:
+            #[result.wait() for result in results]
+            while True:
+                time.sleep(1)
+                # catch exception is results are not ready yet
+                try:
+                    ready = [result.ready() for result in results]
+                    successful = [result.successful() for result in results]
+                except Exception:
+                    continue
+                if all(successful):
+                    break
+                if all(ready) and not all(successful):
+                    raise Exception(
+                        f'Workers raised following exceptions {[result._value for result in results if not result.successful()]}'
+                    )
+            if VALIDATE_RESULTS:
+                # validating data
+                num_generated = len(_fn.filelist(RECORDS_DUMP))
+                if not num_generated == min(i + step, limit):
+                    raise Exception(
+                        f'Mismatch in number of passed for processing speakers ({min(i + step, limit)}) and actually processed ({num_generated}) '
+                    )
+                total_expected += sum([result._value for result in results])
+                total_generated = cache_summary(PRIMARY_CACHE)
+                if AUXILLARY_CACHE:
+                    total_generated += cache_summary(AUXILLARY_CACHE)
+                if not total_expected == total_generated:
+                    raise Exception(
+                        f'Mismatch in number of reported spectrograms ({total_expected}) and actually generated ({total_generated}) '
+                    )
+        else:
+            processed = 0
+            while True:
+                if len(results) == 0:
+                    break
                 for result in results:
-                    D.cache_write(result['cacheId'], result['spectrogram'])
-                    D.append({
-                        'speaker': speaker,
-                        'sample': result['sample'],
-                        'position': result['position'],
-                        'cacheId': result['cacheId'],
-                        'augmentation': result['augmentation'],
-                        'selected': False,
-                        'embedding': None
-                    })
-    time("spectrograms saved")
-    with open('processed.log', 'a') as f:
-        f.write(f'{speaker}, {i}\n')
+                    if result.ready():
+                        if not result.successful():
+                            raise Exception(result._value)
+                        speaker, records = result._value
+                        print(f'Processing {speaker}')
+                        save_records(speaker, records, D)
+                        processed += 1
+                        _fn.report(
+                            f'In pool: {len(results)-1}, processed: {processed}'
+                        )
+                        results.remove(result)
+                else:
+                    print('\u263d\u263d\u263d')
+                    time.sleep(1)
+            D.save(f'{DATASET_TARGET}-{i + step}')
+            speakers = D.get_unique_speakers()
+            with open('processed_speakers.pkl', 'wb') as f:
+                pickle.dump(speakers, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    pool.close()
+    pool.join()
+
+else:
+    if not RESUME:
+        raise IOError('No speakers\' dirs found in mentioned directory')
+    #cache.finalize()
+
+if RECORDS_DUMP:
+    processed = [
+        os.path.join(RECORDS_DUMP, el) for el in _fn.filelist(RECORDS_DUMP)
+    ]
+    for i, el in enumerate(processed):
+        with open(el, 'rb') as f:
+            speaker, records = pickle.load(f)
+            _fn.report(
+                f'{i} out of {len(processed)}: saving and validating speaker {speaker}'
+            )
+            save_records(speaker, records, D)
+            # validate that cache file was created
+            for record in records:
+                if AUXILLARY_CACHE and cache_validate(record['cacheId'],
+                                                      AUXILLARY_CACHE):
+                    continue
+                elif cache_validate(record['cacheId'], PRIMARY_CACHE):
+                    continue
+                else:
+                    raise IOError('Cache does not contain spectrogram file',
+                                  record['cacheId'])
+if AUXILLARY_CACHE:
+    merge_cache(PRIMARY_CACHE, AUXILLARY_CACHE)
+
 D.save(DATASET_TARGET)

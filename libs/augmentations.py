@@ -4,6 +4,7 @@ from timm.data.mixup import Mixup
 from timm.data.random_erasing import RandomErasing
 from timm.data.transforms import RandomResizedCropAndInterpolation
 import warnings
+import librosa
 
 
 def identity(inputs, classes):
@@ -84,12 +85,47 @@ def equalize(inputs, classes):
     return outputs, classes
 
 
+def whitenoise(inputs,
+               classes,
+               rms,
+               snr=15,
+               sr=16000,
+               n_fft=400,
+               fmin=20,
+               fmax=8000,
+               htk=True,
+               n_mels=64):
+    assert len(
+        inputs.shape) == 4, ValueError("inputs should have 4 dim: BxCxHxW")
+    outputs = torch.empty((inputs.shape)).to(inputs.device)
+    for i, input in enumerate(inputs):
+        noise = torch.normal(0,
+                             torch.sqrt(rms**2 / 10**(snr / 10)),
+                             size=(input.shape[0] * 160))
+        noise = (torch.abs(
+            librosa.stft(y=noise,
+                         n_fft=400,
+                         hop_length=160,
+                         window='hamming',
+                         center=True))**2)[:, :input.shape[0]]
+        mel_basis = librosa.filters.mel(sr=sr,
+                                        n_fft=n_fft,
+                                        fmin=fmin,
+                                        fmax=fmax,
+                                        htk=True,
+                                        n_mels=n_mels)
+        mel_noise = torch.dot(mel_basis, noise)
+        back_one = librosa.db_to_power(input)
+        outputs[i] = librosa.power_to_db(back_one + mel_noise.T)
+    return outputs, classes
+
+
 def erase(inputs, classes):
     erase_fn = RandomErasing(probability=1)
     return erase_fn(inputs), classes
 
 
-def mixup(inputs, classes):
+def mixup(inputs, classes, num_classes):
     mixup_args = {
         'mixup_alpha': 1.,
         'cutmix_alpha': 0.,
@@ -98,14 +134,13 @@ def mixup(inputs, classes):
         'switch_prob': 0.,
         'mode': 'batch',
         'label_smoothing': 0,
-        'num_classes': 5994
+        'num_classes': num_classes
     }
     mixup_fn = Mixup(**mixup_args)
-    warnings.warn('Running mixup operation with 5994 classes')
     return mixup_fn(inputs, classes)
 
 
-def cutmix(inputs, classes):
+def cutmix(inputs, classes, num_classes):
     cutmix_args = {
         'mixup_alpha': 0.,
         'cutmix_alpha': 1.0,
@@ -114,8 +149,7 @@ def cutmix(inputs, classes):
         'switch_prob': 0.,
         'mode': 'batch',
         'label_smoothing': 0,
-        'num_classes': 5994
+        'num_classes': num_classes
     }
     cutmix_fn = Mixup(**cutmix_args)
-    warnings.warn('Running cutmix operation with 5994 classes')
     return cutmix_fn(inputs, classes)

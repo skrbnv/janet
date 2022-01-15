@@ -14,11 +14,11 @@ import math
 from string import ascii_lowercase
 from scipy.spatial.distance import cdist
 import libs.visualization as _viz
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import sys
 from glob import glob
 import re
-from importlib import import_module
+#from importlib import import_module
 
 global ambientmemcache
 global musicmemcache
@@ -390,12 +390,17 @@ def generate_slices(raw_audio,
     # because in case of voxceleb there are multiple voices
     # prob due to algo
     if len(raw_audio) <= int(sr * trim * 2):
-        return None
+        return None, None
     if trim > 0:
         raw_audio = raw_audio[int(sr * trim):-int(sr * trim)]
 
     # trim silence from raw audio first
     intervals = librosa.effects.split(y=raw_audio, top_db=30)
+
+    nonsilent = np.concatenate(
+        [raw_audio[trvl[0]:trvl[1]] for trvl in intervals])
+    rms = np.mean(librosa.feature.rms(y=nonsilent))
+
     # we have multiple options here:
     # A. Glue intervals together into one big interval
     # B. Pad intervals with zeros
@@ -403,9 +408,10 @@ def generate_slices(raw_audio,
     # - do we pad on the lelf and right both or just right?
     # - should we shift non-zero sequences across slice as an augmentation strategy?
     data = []
+    segments = {}
     if strategy == 'pad':
         # Split audio, then pad right each, then slice large ones
-        for interval in intervals:
+        for i, interval in enumerate(intervals):
             if interval[1] - interval[0] < 400:  # n_fft = 400
                 continue
             spg = generate_spectrogram(raw_audio[interval[0]:interval[1]], sr,
@@ -413,6 +419,7 @@ def generate_slices(raw_audio,
             if spg.shape[0] < min_len_spg:
                 continue
             else:
+                segments[i] = (0, spg.shape[0])
                 data.append(pad(spg, target_shape[0]))
 
     elif strategy == 'glue' or strategy == 'tokenize':
@@ -423,6 +430,7 @@ def generate_slices(raw_audio,
                 continue
             spg = generate_spectrogram(raw_audio[interval[0]:interval[1]], sr,
                                        n_mels, frame_length_ms, hop_ms).T
+            segments[i] = (len(data), len(data) + spg.shape[0])
             data = np.concatenate((data, spg))
             # if 'tokenize' insert token
             if strategy == 'tokenize':
@@ -433,7 +441,7 @@ def generate_slices(raw_audio,
         # If combined sound file length less than 50% of window size
         # then discard else pad with zeros on the right
         if data.shape[0] < min_len_spg:
-            return None
+            return None, None
         else:
             data = [pad(data, target_shape[0])]
 
@@ -442,13 +450,23 @@ def generate_slices(raw_audio,
         num_slices = int((spg.shape[0] - target_shape[0]) / step_spg) + 1
         slices = np.empty(shape=(num_slices, target_shape[0], n_mels),
                           dtype=np.float32)
+        segm = {}
         for i in range(num_slices):
-            slices[i] = spg[int(i * step_spg):int(i * step_spg +
-                                                  target_shape[0])]
-        for slice in slices:
-            output.append((slice.T, augm))
+            segm[i] = []
+            start, end = int(i * step_spg), int(i * step_spg + target_shape[0])
+            slices[i] = spg[start:end]
+            for j, s in enumerate(segments.values()):
+                if (s[0] < start and s[1] < start) or (s[0] > end
+                                                       and s[1] > end):
+                    continue
+                else:
+                    segm[i].append(
+                        (max(s[0], start) - start, min(s[1], end) - start))
 
-    return output
+        for i, slice in enumerate(slices):
+            output.append((slice.T, augm, segm[i]))
+
+    return output, rms
 
 
 def generate_spectrogram(raw_audio,
@@ -526,3 +544,26 @@ def generate_distance_matrix_and_dump(centroids,
                 f.write(f'{zeroed[i,j]},')
             f.write('\n')
     return True
+
+
+def filelist(path):
+    ''' Shurtcut for generating list of files only in directory '''
+    output = []
+    for fname in os.listdir(path):
+        if not os.path.isdir(os.path.join(path, fname)):
+            output.append(fname)
+    return output
+
+
+def mkdir17(path):
+    # mitigate ignores error 17 'File exists'
+    # This is an issue with multiprocessing when parallel processes
+    # are trying to create same cache folder simultaneously
+    try:
+        os.mkdir(path)
+    except Exception as e:
+        if e.args[0] == 17:
+            return 0
+        else:
+            raise Exception(f'Cannot create directory {path} {e.args}')
+    return 1

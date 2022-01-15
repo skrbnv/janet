@@ -1,10 +1,10 @@
 import torch
-import numpy as np
-import gc
+#import numpy as np
+#import gc
 import libs.functions as _fn
 from libs.data import Dataset
 import libs.losses as _losses
-import libs.validation as _val
+#import libs.validation as _val
 import libs.classifier as _cls
 from importlib import import_module
 import wandb
@@ -35,7 +35,7 @@ parser.add_argument('--resume',
 parser.add_argument(
     '--config',
     action='store',
-    default='configs.resnet009',
+    default='configs.janet001',
     help='config filename (including path) imported as module, \
         defaults to configs.default')
 args = parser.parse_args()
@@ -78,12 +78,11 @@ _fn.report("Torch is using device:", device)
 
 Model = getattr(import_module(CFG.MODEL_LIBRARY_PATH), CFG.MODEL_NAME)
 model = Model()
-model.fc = torch.nn.Linear(256, CFG.NUM_CLASSES)
 
 model.float()
 if torch.cuda.is_available():
     model.cuda()
-_fn.report("Model created")
+_fn.report(f"Model \"{model.__class__.__name__}\" created")
 
 if CFG.TORCHINFO_SHAPE is not None:
     torchinfo.summary(model, CFG.TORCHINFO_SHAPE)
@@ -101,11 +100,18 @@ _fn.report("Optimizer initialized")
 #    _fn.report("Optimizer state dict loaded from checkpoint")
 
 D = Dataset(filename=os.path.join(CFG.DATASET_DIR, CFG.DATASET_TRAIN),
-            cache_path=CFG.SPECTROGRAMS_CACHE)
+            cache_path=CFG.TRAIN_CACHE,
+            force_even=True)
+D_eval = D.get_randomized_subset(max_records=50,
+                                 speakers_filter=D.get_unique_speakers())
 V = Dataset(filename=os.path.join(CFG.DATASET_DIR, CFG.DATASET_VALIDATE),
-            cache_path=CFG.SPECTROGRAMS_CACHE)
+            cache_path=CFG.VALIDATE_CACHE)
 train_loader = DataLoader(D, batch_size=32, shuffle=True, num_workers=0)
 valid_loader = DataLoader(V, batch_size=32, shuffle=True, num_workers=0)
+train_eval_loader = DataLoader(D_eval,
+                               batch_size=32,
+                               shuffle=True,
+                               num_workers=0)
 
 _fn.report("Full train and validation datasets loaded")
 
@@ -134,12 +140,14 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
                "****************")
     lss = _losses.Losses()
     _fn.report("-------------- Training ----------------")
+
     losses = _cls.train(train_loader,
                         model,
                         optimizer,
                         criterion,
                         device,
-                        augmentations=['equalize', 'gradclip'])
+                        augmentations=['mixup', 'cutmix', 'erase', 'gradclip'],
+                        num_classes=CFG.NUM_CLASSES)
     lss.append(losses, epoch)
     _fn.report(f'Epoch loss: {lss.mean(epoch):.4f}')
     """
@@ -149,7 +157,7 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
     """
 
     top1train, top5train, top1val, top5val = _cls.validate(
-        train_loader, valid_loader, model, device)
+        train_eval_loader, valid_loader, model, device)
 
     print(
         f"T1T: {top1train}, T5T: {top5train}, T1V: {top1val}, T5V: {top5val}")
