@@ -1,28 +1,5 @@
 import torch
 import torch.nn as nn
-import math
-
-
-class MyLinearLayer(nn.Module):
-    """ Custom Linear layer but mimics a standard linear layer """
-    def __init__(self, size_in, size_out):
-        super().__init__()
-        self.size_in, self.size_out = size_in, size_out
-        weights = torch.Tensor(size_out, size_in)
-        self.weights = nn.Parameter(
-            weights)  # nn.Parameter is a Tensor that's a module parameter.
-        bias = torch.Tensor(size_out)
-        self.bias = nn.Parameter(bias)
-
-        # initialize weights and biases
-        nn.init.kaiming_uniform_(self.weights, a=math.sqrt(5))  # weight init
-        fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weights)
-        bound = 1 / math.sqrt(fan_in)
-        nn.init.uniform_(self.bias, -bound, bound)  # bias init
-
-    def forward(self, x):
-        w_times_x = torch.mm(x, self.weights.t())
-        return torch.add(w_times_x, self.bias)
 
 
 class Attention(nn.Module):
@@ -32,12 +9,13 @@ class Attention(nn.Module):
         # we do Conv2d with kernel_size=1 grouped into num_heads groups
         # 1x1 convolution when out_filters = in_filters is pretty much fully connected layer,
         # and groups = in_filters is parallelizing computations per head
+        '''
         self.multilinear1 = nn.Conv1d(num_heads * h * w,
                                       num_heads * h * w,
                                       kernel_size=1,
                                       groups=num_heads)
-        self.weights = nn.Parameter(torch.Tensor(h, w))
-        nn.init.kaiming_uniform_(self.weights)
+        '''
+        self.multilinear1 = nn.Conv2d(num_heads, num_heads, kernel_size=1)
         self.bn = nn.BatchNorm2d(num_heads)
         self.relu = nn.ReLU()
 
@@ -48,11 +26,14 @@ class Attention(nn.Module):
         x = torch.bmm(x.flatten(start_dim=0, end_dim=1),
                       x.flatten(start_dim=0, end_dim=1).transpose(1, 2))
         # shape here is still (num_heads, size, size)
+        '''
         x = self.multilinear1(
             x.view(shape).flatten(start_dim=1, end_dim=3).unsqueeze(2))
+        '''
         # shape here is still (num_heads, size, size)
         # now we average over heads, kind of like avg pooling but across planes
         x = x.view(shape)
+        x = self.multilinear1(x)
         x = self.bn(x)
         x = self.relu(x)
         return x

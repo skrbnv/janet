@@ -30,7 +30,7 @@ VALIDATE_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/double/cache/validate/"
 TORCHINFO_SHAPE = (64, 1, 64, 192)  # shape or None
 '''
 # MODEL
-MODEL_LIBRARY_PATH = 'libs.models.janet_v4'
+MODEL_LIBRARY_PATH = 'libs.models.janet_v7'
 MODEL_NAME = 'Janet'
 # VISUALIZATION
 VIZ_DIR = "./visualization/"

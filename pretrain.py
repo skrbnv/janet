@@ -82,7 +82,7 @@ model = Model()
 model.float()
 if torch.cuda.is_available():
     model.cuda()
-_fn.report(f"Model \"{model.__class__.__name__}\" created")
+_fn.report(f"Model {CFG.MODEL_NAME} from {CFG.MODEL_LIBRARY_PATH} created")
 
 if CFG.TORCHINFO_SHAPE is not None:
     torchinfo.summary(model, CFG.TORCHINFO_SHAPE)
