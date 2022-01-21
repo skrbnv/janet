@@ -22,6 +22,7 @@ def mp_worker(id, folder, length, config):
     )
     records = []
     samples = _fn.raw_audio_by_dir(folder, config['MAX_SAMPLES_PER_SPEAKER'])
+
     for sample in samples:
         rcs = process_sample(sample, config)
         if rcs is not None:
@@ -56,47 +57,53 @@ def process_sample(sample, config):
     ''' Function responsible for processing single sample into set of spectrograms '''
     #audioEmpzd = _fn.preemphasize(sample[1])
     audioEmpzd = sample[1]
-    spectrograms, rms = _fn.generate_slices(
-        audioEmpzd,
-        length=config['SLICE_MS'] / 1000,
-        sr=16000,
-        step=config['STEP_MS'] / 1000,
-        trim=config['TRIM_MS'] / 1000,
-        strategy=config['SLICING_STRATEGY'],
-        min_len=config['SKIPSHORTSLICES'],
-        n_mels=config['MEL_BANKS'],
-        augm=0)
-
-    if spectrograms is None:
-        return None
-
-    #shuffle slices to be able to pick spectrograms within sample in random order
-    indices = np.arange(len(spectrograms))
-    if config['PICK_RANDOM_SPECTROGRAMS']:
-        np.random.shuffle(indices)
-        spectrograms = [spectrograms[i] for i in indices]
-    inner_counter = 0
+    augmentations = [0]
+    if config['WHITENOISE']:
+        augmentations.append(1)
     records = []
-    for (spectrogram, augm, segm), eachindex in zip(spectrograms, indices):
-        if inner_counter == config['MAX_SPECTROGRAMS_PER_SAMPLE']:
-            break
-        spectrogram += 40
-        spectrogram /= 40
-        if config['FORCE_SHAPE']:
-            spectrogram_resized = cv2.resize(
-                spectrogram, dsize=config['FORCE_SHAPE_SIZE'])[np.newaxis]
-        else:
-            spectrogram_resized = spectrogram[np.newaxis].astype(np.float32)
+    for augmentation in augmentations:
+        spectrograms, rms = _fn.generate_slices(
+            audioEmpzd,
+            length=config['SLICE_MS'] / 1000,
+            sr=16000,
+            step=config['STEP_MS'] / 1000,
+            trim=config['TRIM_MS'] / 1000,
+            strategy=config['SLICING_STRATEGY'],
+            min_len=config['SKIPSHORTSLICES'],
+            n_mels=config['MEL_BANKS'],
+            augm=augmentation,
+            config=config)
 
-        cache_id = str(sample[0]) + "_" + str(eachindex.item())
-        records.append({
-            'sample': sample[0],
-            'position': eachindex.item(),
-            'cacheId': cache_id,
-            'spectrogram': spectrogram_resized,
-            'augmentation': augm,
-            'segments': segm,
-            'rms': rms
-        })
-        inner_counter += 1
+        if spectrograms is None:
+            return None
+
+        #shuffle slices to be able to pick spectrograms within sample in random order
+        indices = np.arange(len(spectrograms))
+        if config['PICK_RANDOM_SPECTROGRAMS']:
+            np.random.shuffle(indices)
+            spectrograms = [spectrograms[i] for i in indices]
+        inner_counter = 0
+        for (spectrogram, augm, segm), eachindex in zip(spectrograms, indices):
+            if inner_counter == config['MAX_SPECTROGRAMS_PER_SAMPLE']:
+                break
+            spectrogram += 40
+            spectrogram /= 40
+            if config['FORCE_SHAPE']:
+                spectrogram_resized = cv2.resize(
+                    spectrogram, dsize=config['FORCE_SHAPE_SIZE'])[np.newaxis]
+            else:
+                spectrogram_resized = spectrogram[np.newaxis].astype(
+                    np.float32)
+
+            cache_id = f'{sample[0]}_{augm}-{eachindex.item()}'
+            records.append({
+                'sample': sample[0],
+                'position': eachindex.item(),
+                'cacheId': cache_id,
+                'spectrogram': spectrogram_resized,
+                'augmentation': augm,
+                'segments': segm,
+                'rms': rms
+            })
+            inner_counter += 1
     return records if len(records) > 0 else None

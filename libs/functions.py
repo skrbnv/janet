@@ -177,15 +177,19 @@ def nonpaddedsignal(signal):
 
 
 # add white noise
-def whitenoise(signal, snr=10):
+def whitenoise(signal, snr=15):
     ss = nonpaddedsignal(signal)
-    rms = np.mean(librosa.feature.rms(y=ss))
-    if rms == 0:
-        raise Exception(
-            "RMS mean is equal to zero. Either you passed zeros as signal or librosa malfunctioned"
-        )
+    #rms = np.mean(librosa.feature.rms(y=ss))
+    #if rms == 0:
+    #    raise Exception(
+    #        "RMS mean is equal to zero. Either you passed zeros as signal or librosa malfunctioned"
+    #    )
     # generate rms of noise then add
-    noise = np.random.normal(0, np.sqrt(rms**2 / 10**(snr / 10)), ss.shape[0])
+    #noise = np.random.normal(0, np.sqrt(rms**2 / 10**(snr / 10)), ss.shape[0])
+    gamma = 10**(snr / 10)
+    pwr = np.mean(abs(ss)**2)
+    nsd = pwr / gamma
+    noise = np.random.normal(0, np.sqrt(nsd / 2), ss.shape)
     return np.pad(ss + noise, (0, len(signal) - len(ss)))
 
 
@@ -371,6 +375,21 @@ def trim(data, target_len):
     return data
 
 
+def augmentations_processor(signal, augm=0, config=None):
+    if augm == 0:
+        return signal
+    elif augm == 1:
+        if config is None:
+            raise Exception(
+                'No configuration provided for augmentation \'white noise\'')
+        snr = np.random.random() * (
+            config['WHITENOISE'][1] -
+            config['WHITENOISE'][0]) + config['WHITENOISE'][0]
+        return whitenoise(signal, snr)
+    else:
+        return signal
+
+
 def generate_slices(raw_audio,
                     sr=16000,
                     length=2.,
@@ -381,7 +400,8 @@ def generate_slices(raw_audio,
                     n_mels=40,
                     frame_length_ms=25,
                     hop_ms=10,
-                    augm=0):
+                    augm=0,
+                    config=None):
     min_len_spg = int(min_len * 1000 / hop_ms)
     step_spg = int(step * 1000 / hop_ms)
     target_shape = (int(length * 1000 / hop_ms), n_mels)
@@ -414,8 +434,10 @@ def generate_slices(raw_audio,
         for i, interval in enumerate(intervals):
             if interval[1] - interval[0] < 400:  # n_fft = 400
                 continue
-            spg = generate_spectrogram(raw_audio[interval[0]:interval[1]], sr,
-                                       n_mels, frame_length_ms, hop_ms).T
+            signal = augmentations_processor(
+                raw_audio[interval[0]:interval[1]], augm, config)
+            spg = generate_spectrogram(signal, sr, n_mels, frame_length_ms,
+                                       hop_ms).T
             if spg.shape[0] < min_len_spg:
                 continue
             else:
@@ -428,8 +450,10 @@ def generate_slices(raw_audio,
         for i, interval in enumerate(intervals):
             if interval[1] - interval[0] < 400:  # n_fft = 400
                 continue
-            spg = generate_spectrogram(raw_audio[interval[0]:interval[1]], sr,
-                                       n_mels, frame_length_ms, hop_ms).T
+            signal = augmentations_processor(
+                raw_audio[interval[0]:interval[1]], augm, config)
+            spg = generate_spectrogram(signal, sr, n_mels, frame_length_ms,
+                                       hop_ms).T
             segments[i] = (len(data), len(data) + spg.shape[0])
             data = np.concatenate((data, spg))
             # if 'tokenize' insert token
@@ -474,26 +498,46 @@ def generate_spectrogram(raw_audio,
                          n_mels=40,
                          frame_length_ms=25,
                          hop_ms=10):
+    Fdb, _ = generate_spectrogram_and_stft(raw_audio, sr, n_mels,
+                                           frame_length_ms, hop_ms)
+    return Fdb
+
+
+def generate_spectrogram_and_stft(raw_audio,
+                                  sr=16000,
+                                  n_mels=40,
+                                  frame_length_ms=25,
+                                  hop_ms=10):
     # 512 (32ms) vs 256 (16ms) when sr=16000 / optimal for speech is (512) 23ms with sr=22050
     # "frame length=25ms, frame shift=10ms" / 1/16000 => window = 400, hop = 160
     frame_length = int(frame_length_ms * sr / 1000)
     hop = int(hop_ms * sr / 1000)
-    S = np.abs(
-        librosa.stft(y=raw_audio,
+    s = librosa.stft(y=raw_audio,
                      n_fft=frame_length,
                      hop_length=hop,
                      window='hamming',
-                     center=True))**2
-    # Calculating mel_basis
-    mel_basis = librosa.filters.mel(sr=sr,
-                                    n_fft=frame_length,
-                                    fmin=20,
-                                    fmax=8000,
-                                    htk=True,
-                                    n_mels=n_mels)
+                     center=True)
+    Fdb = stft_to_spectrogram(s,
+                              sr=sr,
+                              n_mels=n_mels,
+                              frame_length=frame_length,
+                              mel_basis=None)
+
+    return Fdb, s
+
+
+def stft_to_spectrogram(s, sr, n_mels, frame_length, mel_basis=None):
+    S = np.abs(s)**2
+    if mel_basis is None:
+        # Calculating mel_basis
+        mel_basis = librosa.filters.mel(sr=sr,
+                                        n_fft=frame_length,
+                                        fmin=20,
+                                        fmax=8000,
+                                        htk=True,
+                                        n_mels=n_mels)
     F = np.dot(mel_basis, S)
     Fdb = librosa.power_to_db(F, ref=np.max)[:, :-1]
-
     # plt.clf()
     # plt.plot(raw_audio)
     # plt.savefig('E.png')

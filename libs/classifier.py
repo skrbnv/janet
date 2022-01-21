@@ -5,10 +5,17 @@ import libs.functions as _fn
 import libs.augmentations as _aug
 
 
-def train_loop(loader, model, optimizer, criterion, device, augmentation,
-               clipping, num_classes):
+def train_loop(loader,
+               model,
+               optimizer,
+               criterion,
+               device,
+               augmentation,
+               clipping,
+               num_classes,
+               extras={}):
     losses = []
-    for inputs, labels in tqdm(loader):
+    for inputs, labels, specs in tqdm(loader):
         optimizer.zero_grad()
         if augmentation == 'mixup':
             bi, bl = _aug.mixup(
@@ -22,18 +29,14 @@ def train_loop(loader, model, optimizer, criterion, device, augmentation,
                 num_classes)
         elif augmentation == 'erase':
             bi, bl = _aug.erase(inputs.to(device), labels.to(device))
-        elif augmentation == 'pitch_shift':
-            bi, bl = _aug.pitch_shift(inputs.to(device), labels.to(device))
-        elif augmentation == 'speed':
-            bi, bl = _aug.speed(inputs.to(device), labels.to(device))
-        elif augmentation == 'volume':
-            bi, bl = _aug.volume(inputs.to(device), labels.to(device))
-        elif augmentation == 'contrast':
-            bi, bl = _aug.contrast(inputs.to(device), labels.to(device))
-        elif augmentation == 'equalize':
-            bi, bl = _aug.equalize(inputs.to(device), labels.to(device))
         elif augmentation == 'whitenoise':
             bi, bl = _aug.whitenoise(inputs.to(device), labels.to(device))
+        elif augmentation == 'ambient_noise':
+            bi, bl = _aug.ambient_noise(inputs.to(device), labels.to(device),
+                                        extras['ambient'])
+        elif augmentation == 'music_noise':
+            bi, bl = _aug.music_noise(inputs.to(device), labels.to(device),
+                                      extras['music'])
         else:
             bi, bl = inputs.to(device), labels.to(device)
         y_pred = model(bi)
@@ -52,10 +55,11 @@ def train(train_loader,
           criterion,
           device,
           num_classes,
-          augmentations=None):
+          augmentations=None,
+          extras={}):
     if augmentations is None:
         augmentations = []
-    augms = ['unchanged']
+    augms = ['_']
     augms.extend(augmentations)
     if 'gradclip' in augms:
         grad_clip = True
@@ -63,20 +67,20 @@ def train(train_loader,
     else:
         grad_clip = False
     _fn.report(
-        f'Running train loop with following augmentations: {augms}, using gradient clipping: {grad_clip}'
+        f'Running train loop with following augmentations: {"None" if len(augms)==1 else augms}, using gradient clipping: {grad_clip}'
     )
     losses = []
     for augm in augms:
         losses.extend(
             train_loop(train_loader, model, optimizer, criterion, device, augm,
-                       grad_clip, num_classes))
+                       grad_clip, num_classes, extras))
     return losses
 
 
 def validation_loop(loader, model, device):
     total, correct_t1, correct_t5 = 0, 0, 0
     model.eval()
-    for inputs, labels in tqdm(loader):
+    for inputs, labels, _ in tqdm(loader):
         with torch.no_grad():
             y_pred = model(inputs.to(device))
         # three options: indices, one-hot or soft probabilities (including n-hot)

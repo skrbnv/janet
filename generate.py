@@ -35,16 +35,18 @@ args = parser.parse_args()
 RESUME = args.resume
 VALIDATE_RESULTS = args.validate
 ASSEMBLE = args.assemble
-'''
-MEDIA_DIR = "/media/my3bikaht/EXT4/datasets/TIMIT2/sorted/train"
-DATASET_TARGET = "/media/my3bikaht/EXT4/datasets/TIMIT2/datasets/glued-2s-mel80-tokenized-plain-train.dt"
-PRIMARY_CACHE = "/media/my3bikaht/EXT4/datasets/TIMIT2/cache/glued-2s-mel80-tokenized-plain"
+MEDIA_DIR = "/mnt/nvme2tb/datasets/TIMIT2/sorted/train"
+DATASET_TARGET = "/mnt/nvme2tb/datasets/TIMIT2/whitenoise-more/datasets/train.dt"
+PRIMARY_CACHE = "/mnt/nvme2tb/datasets/TIMIT2/whitenoise-more/cache/train"
+AUXILLARY_CACHE = None
+RECORDS_DUMP = None
 '''
 MEDIA_DIR = "/mnt/nvme2tb/datasets/voxceleb2/sorted/train"
 DATASET_TARGET = "/mnt/nvme2tb/datasets/voxceleb2/double/datasets/train.dt"
 PRIMARY_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/double/cache"
 AUXILLARY_CACHE = "/media/sergey/386217cc-3490-42e9-b723-c3a32cc41f1f/tmp/quick-train"
 RECORDS_DUMP = './records/train'
+'''
 # AUXILLARY_CACHE is a temp cache on second disk drive to increase number of IO ops
 # RECORDS_DUMP, if exists, defines temp location to store records due to delays if
 # we sync adding records to single dataset
@@ -73,9 +75,12 @@ SKIPFIRSTFRAME = False
 
 #SPECTROGRAMS#
 MAX_SPEAKERS = 6000
-MAX_SAMPLES_PER_SPEAKER = 50
-MAX_SPECTROGRAMS_PER_SAMPLE = 10
+MAX_SAMPLES_PER_SPEAKER = 100
+MAX_SPECTROGRAMS_PER_SAMPLE = 50
 PICK_RANDOM_SPECTROGRAMS = True
+
+#AUGMENTATIONS
+WHITENOISE = (0, 10)
 
 _fn.report(" ************************************************** ")
 _fn.report(" **            Spectrograms generation           ** ")
@@ -98,10 +103,14 @@ _fn.report(f'   for up to {MAX_SPEAKERS} speakers,')
 _fn.report(f'Melbanks: {MEL_BANKS}')
 _fn.report(f'Trimming audio, ms: {TRIM_MS}')
 _fn.report(f'Skipping first frame: {SKIPFIRSTFRAME}')
+if WHITENOISE:
+    _fn.report(
+        f'           with addition of extra samples with white noise {WHITENOISE}'
+    )
 input("Press any key to continue >> ")
 
 max_processes = cpu_count()
-step = max_processes * 2
+step = max_processes * 5
 folders = [f.path for f in os.scandir(MEDIA_DIR) if f.is_dir()]
 if MAX_SPEAKERS > 0:
     folders = folders[:MAX_SPEAKERS]
@@ -129,6 +138,7 @@ config = {
     'PICK_RANDOM_SPECTROGRAMS': PICK_RANDOM_SPECTROGRAMS,
     'FORCE_SHAPE': FORCE_SHAPE,
     'FORCE_SHAPE_SIZE': FORCE_SHAPE_SIZE,
+    'WHITENOISE': WHITENOISE
 }
 if limit > 0:
     total_expected = 0

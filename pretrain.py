@@ -1,8 +1,9 @@
 import torch
+from configs.janet001 import TRAIN_CACHE
 #import numpy as np
 #import gc
 import libs.functions as _fn
-from libs.data import Dataset
+from libs.data import Dataset, NoiseLibrary
 import libs.losses as _losses
 #import libs.validation as _val
 import libs.classifier as _cls
@@ -32,6 +33,10 @@ parser.add_argument('--resume',
                     action='store_true',
                     default=False,
                     help='resume run')
+parser.add_argument('--freeze',
+                    action='store_true',
+                    default=False,
+                    help='freeze extractor layers')
 parser.add_argument(
     '--config',
     action='store',
@@ -39,7 +44,7 @@ parser.add_argument(
     help='config filename (including path) imported as module, \
         defaults to configs.default')
 args = parser.parse_args()
-RESUME, WANDB, cfg_path = args.resume, args.wandb, args.config
+RESUME, WANDB, FREEZE, cfg_path = args.resume, args.wandb, args.freeze, args.config
 
 _fn.report(f'Importing configuration from \'{cfg_path}\'')
 CFG = import_module(cfg_path)
@@ -84,12 +89,21 @@ if torch.cuda.is_available():
     model.cuda()
 _fn.report(f"Model {CFG.MODEL_NAME} from {CFG.MODEL_LIBRARY_PATH} created")
 
-if CFG.TORCHINFO_SHAPE is not None:
-    torchinfo.summary(model, CFG.TORCHINFO_SHAPE)
-
 if RESUME:
     model.load_state_dict(checkpoint['state_dict'])
     _fn.report("Model state dict loaded from checkpoint")
+if FREEZE:
+    if not RESUME:
+        raise Exception('Process started anew, cannot freeze new layers')
+    if model.extractor:
+        for param in model.extractor.parameters():
+            param.requires_grad = False
+        _fn.report('Model Extractor block parameters are frozen')
+    else:
+        raise Exception('No \'extractor\' block in model')
+
+if CFG.TORCHINFO_SHAPE is not None:
+    torchinfo.summary(model, CFG.TORCHINFO_SHAPE)
 
 optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9)
 #optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
@@ -99,21 +113,40 @@ _fn.report("Optimizer initialized")
 #    optimizer.load_state_dict(checkpoint['optimizer'])
 #    _fn.report("Optimizer state dict loaded from checkpoint")
 
-D = Dataset(filename=os.path.join(CFG.DATASET_DIR, CFG.DATASET_TRAIN),
-            cache_path=CFG.TRAIN_CACHE,
+D = Dataset(filename=CFG.DATASET_TRAIN,
+            cache_paths=CFG.TRAIN_CACHE,
             force_even=True)
-D_eval = D.get_randomized_subset(max_records=50,
-                                 speakers_filter=D.get_unique_speakers())
-V = Dataset(filename=os.path.join(CFG.DATASET_DIR, CFG.DATASET_VALIDATE),
-            cache_path=CFG.VALIDATE_CACHE)
-train_loader = DataLoader(D, batch_size=32, shuffle=True, num_workers=0)
-valid_loader = DataLoader(V, batch_size=32, shuffle=True, num_workers=0)
+D_eval = D.get_randomized_subset_with_augmentation(
+    max_records=50,
+    speakers_filter=D.get_unique_speakers(),
+    augmentations_filter=[0])
+V = Dataset(filename=CFG.DATASET_VALIDATE, cache_paths=CFG.VALIDATE_CACHE)
+train_workers = len(CFG.TRAIN_CACHE) if isinstance(CFG.TRAIN_CACHE,
+                                                   list) else 0
+train_loader = DataLoader(D,
+                          batch_size=32,
+                          shuffle=True,
+                          num_workers=train_workers)
+valid_workers = len(CFG.VALIDATE_CACHE) if isinstance(CFG.VALIDATE_CACHE,
+                                                      list) else 0
+valid_loader = DataLoader(V,
+                          batch_size=32,
+                          shuffle=True,
+                          num_workers=valid_workers)
 train_eval_loader = DataLoader(D_eval,
                                batch_size=32,
                                shuffle=True,
-                               num_workers=0)
-
+                               num_workers=train_workers)
 _fn.report("Full train and validation datasets loaded")
+
+anlib = NoiseLibrary(
+    CFG.AMBIENT_FILE) if 'ambient_noise' in CFG.AUGMENTATIONS else None
+if anlib is not None:
+    _fn.report('Ambient noises library loaded')
+mnlib = NoiseLibrary(
+    CFG.MUSIC_FILE) if 'music_noise' in CFG.AUGMENTATIONS else None
+if mnlib is not None:
+    _fn.report('Music noises library loaded')
 
 ########################################################
 ####          Setting up basic variables          ####
@@ -146,8 +179,12 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
                         optimizer,
                         criterion,
                         device,
-                        augmentations=['mixup', 'cutmix', 'erase', 'gradclip'],
-                        num_classes=CFG.NUM_CLASSES)
+                        augmentations=CFG.AUGMENTATIONS,
+                        num_classes=CFG.NUM_CLASSES,
+                        extras={
+                            'ambient': anlib,
+                            'music': mnlib
+                        })
     lss.append(losses, epoch)
     _fn.report(f'Epoch loss: {lss.mean(epoch):.4f}')
     """

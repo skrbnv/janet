@@ -1,42 +1,40 @@
-WANDBPROJECTNAME = 'triplets-timit-simple-pretrain'
-EPOCHS_TOTAL = 9999
+'''
+WANDBPROJECTNAME = 'triplets-timit-simple-augmentation-test'
+EPOCHS_TOTAL = 31
 # GPU
 GPU_ID = 0
 # DATASETS & CACHE
 NUM_CLASSES = 630
-DATASET_DIR = "/mnt/nvme2tb/datasets/TIMIT2/datasets/"
-DATASET_TRAIN = "glued-1_92s-mel64-plain-train.dt"
-DATASET_VALIDATE = "glued-1_92s-mel64-plain-validate.dt"
-DATASET_TEST = "TIMIT-test.dt"
-TRAIN_CACHE = "/mnt/nvme2tb/datasets/TIMIT2/cache/glued-1_92s-mel64-plain"
-VALIDATE_CACHE = "/mnt/nvme2tb/datasets/TIMIT2/cache/glued-1_92s-mel64-plain"
+DATASET_TRAIN = "/mnt/nvme2tb/datasets/TIMIT2/simple/datasets/train.dt"
+TRAIN_CACHE = "/mnt/nvme2tb/datasets/TIMIT2/simple/cache/train"
+DATASET_VALIDATE = "/mnt/nvme2tb/datasets/TIMIT2/simple/datasets/validate.dt"
+VALIDATE_CACHE = "/mnt/nvme2tb/datasets/TIMIT2/simple/cache/validate"
+DATASET_TEST = None
 TORCHINFO_SHAPE = (64, 1, 64, 192)  # shape or None
-
-# ------------------------- CONSTANTS -------------------------
 '''
+# ------------------------- CONSTANTS -------------------------
+
 # BASIC
 WANDBPROJECTNAME = 'triplets-voxceleb2-double-pretrain'
 EPOCHS_TOTAL = 9999
 # GPU
-GPU_ID = 1
+GPU_ID = 0
 # DATASETS & CACHE
 NUM_CLASSES = 5994
-DATASET_DIR = "/mnt/nvme2tb/datasets/voxceleb2/double/datasets/"
-DATASET_TRAIN = "train.dt"
-DATASET_VALIDATE = "validate.dt"
-DATASET_TEST = "TIMIT-test.dt"
-TRAIN_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/double/cache/train/"
-VALIDATE_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/double/cache/validate/"
+DATASET_TRAIN = "/mnt/nvme2tb/datasets/voxceleb2/double/datasets/train.dt"
+TRAIN_CACHE = ["/mnt/nvme2tb/datasets/voxceleb2/double/cache/train/"]
+DATASET_VALIDATE = "/mnt/nvme2tb/datasets/voxceleb2/double/datasets/validate.dt"
+VALIDATE_CACHE = ["/mnt/nvme2tb/datasets/voxceleb2/double/cache/validate/"]
 TORCHINFO_SHAPE = (64, 1, 64, 192)  # shape or None
-'''
+
 # MODEL
-MODEL_LIBRARY_PATH = 'libs.models.janet_v7'
+MODEL_LIBRARY_PATH = 'libs.models.janet_vox_v2'
 MODEL_NAME = 'Janet'
 # VISUALIZATION
 VIZ_DIR = "./visualization/"
 # CHECKPOINTS
-RUN_ID = '2qzvq9i4'
-CHECKPOINTFILENAME = "./checkpoints/2qzvq9i4057.dict"
+RUN_ID = '1lpsocrw'
+CHECKPOINTFILENAME = "./checkpoints/1lpsocrw064.dict"
 # SUBSETS
 USE_SUBSETS = True
 SUBSET_SPEAKERS = 64
@@ -51,3 +49,6 @@ POSITIVECRITERION = 'Random'  # 'Random' vs 'Hard'.
 # negative strategies
 NEGATIVESEMIHARD = 1  # select semi-hard negatives
 NEGATIVEHARD = 1  # select hard negatives
+AUGMENTATIONS = ['ambient_noise', 'gradclip']
+AMBIENT_FILE = '/mnt/nvme2tb/datasets/ambient_noises/ambient.npy'
+MUSIC_FILE = '/mnt/nvme2tb/datasets/music-genres-kaggle/music.npy'

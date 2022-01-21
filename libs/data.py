@@ -12,6 +12,7 @@ from torch.utils.data import Dataset as UtilsDataset
 from torch.utils.data import DataLoader
 import psutil
 import shutil
+import tqdm
 
 
 def cache_write(id, arr, cache=None):
@@ -43,19 +44,23 @@ def cache_write(id, arr, cache=None):
 
 
 class FileStorageIndex():
-    def __init__(self, path) -> None:
-        self.path = path
+    def __init__(self, paths) -> None:
+        self.paths = paths
         self.storages = None
         self.outdated = False
         self.data = {}
         self.rescan()
 
     def rescan(self):
-        self.storages = [f.path for f in os.scandir(self.path) if f.is_dir()]
-        for storage in self.storages:
+        self.storages = []
+        for path in self.paths:
+            self.storages.extend(
+                [f.path for f in os.scandir(path) if f.is_dir()])
+        for storage in tqdm.tqdm(self.storages,
+                                 desc="Rebuilding cache indices"):
             for f in os.listdir(storage):
-                if not os.path.isdir(os.path.join(self.path, storage, f)):
-                    self.data[f] = os.path.join(self.path, storage, f)
+                if not os.path.isdir(os.path.join(storage, f)):
+                    self.data[f] = os.path.join(storage, f)
 
     def where(self, key):
         return self.data[key]
@@ -99,14 +104,51 @@ class MemCache():
             return None
 
 
+class NoiseLibrary():
+    def __init__(self, fname) -> None:
+        self.library = torch.from_numpy(np.load(fname))  # np.fromfile(fname)
+        self.len = self.library.shape[1]
+
+    def slice(self, ln):
+        if ln > self.len:
+            raise Exception(
+                f'Requested length {ln} is too big for noise library with length {self.len}'
+            )
+        start = random.randint(0, self.len - ln)
+        return self.library[:, start:start + ln]
+
+    def overlay(self, arr, amplif=1.):
+        ln = arr.shape[1]
+        output = torch.add(arr, self.slice(ln).to(arr.device), alpha=amplif)
+        return output
+
+    def batch_overlay(self, arr, amplif=1.):
+        if not (len(arr.shape) == 3 or len(arr.shape) == 4):
+            raise Exception(
+                f'Expected dim = 3 or 4 for batch overlay noise, got {len(arr.shape)}'
+            )
+        initial_shape = arr.shape
+        if len(arr.shape) == 4:
+            arr = arr.flatten(0, 1)
+        output = torch.empty(arr.shape).to(arr.device)
+        for i in range(arr.shape[0]):
+            output[i] = self.overlay(arr[i], amplif)
+        return output.reshape(initial_shape)
+
+
 class Dataset(UtilsDataset):
-    def __init__(self, cache_path, data=None, filename=None, force_even=False):
+    def __init__(self,
+                 cache_paths,
+                 data=None,
+                 filename=None,
+                 force_even=False):
         if data is not None and filename is not None:
             raise Exception(
                 'Cannot create dataset with both data and filename passed as parameters'
             )
 
-        self.cache_path = cache_path
+        self.cache_paths = [cache_paths] if isinstance(cache_paths,
+                                                       str) else cache_paths
         self.report = print
         self.dm = None
         self.speakers = None
@@ -117,7 +159,7 @@ class Dataset(UtilsDataset):
             if force_even:
                 self.make_even()
             self.speakers = self.get_unique_speakers()
-        self.fileindex = FileStorageIndex(path=self.cache_path)
+        self.fileindex = FileStorageIndex(paths=self.cache_paths)
         if filename is not None:
             self.load(filename)
             self.make_even()
@@ -186,7 +228,7 @@ class Dataset(UtilsDataset):
 
     def cache_write(self, id, obj):
         self.fileindex.outdated = True
-        return cache_write(id, obj, cache=self.cache_path)
+        return cache_write(id, obj, cache=random.choice(self.cache_paths))
 
     def cache_read(self, id):
         # scan filesystem on first start
@@ -485,6 +527,9 @@ class Dataset(UtilsDataset):
                                                 augmentations_filter=[]):
         # adding sorted just in case order follows initial order during creation,
         # when same speaker records were added sequentially
+        _fn.report(
+            f'Generating randomized subset with {len(speakers_filter)} speakers, up to {max_records} records each, with following augmentations: {augmentations_filter}'
+        )
         current_speaker = None
         records = []
         output = {}
@@ -511,7 +556,7 @@ class Dataset(UtilsDataset):
                 # got to the record with next speaker
                 records = [{'key': key, 'value': value}]
                 current_speaker = value['speaker']
-        return Dataset(data=output, cache_path=self.cache_path)
+        return Dataset(data=output, cache_paths=self.cache_paths)
 
     def get_randomized_subset(self, max_records, speakers_filter):
         return self.get_randomized_subset_with_augmentation(
@@ -541,6 +586,21 @@ class Dataset(UtilsDataset):
         self.dm = cdist(e, e, metric=metric)
         return self.dm
 
+    def get_augmentations_list(self):
+        augms = list(set([el['augm'] for el in self.data]))
+        output = []
+        for augm in augms:
+            if augm == 1:
+                augm_name = 'white noise'
+            elif augm == 2:
+                augm_name = 'music overlay'
+            elif augm == 3:
+                augm_name = 'ambient overlay'
+            else:
+                continue
+            output.append(augm_name)
+        return output
+
     def __len__(self):
         return len(self.data)
 
@@ -561,7 +621,13 @@ class Dataset(UtilsDataset):
             label = self.encode_speaker_index(self.data[index]['speaker'])
         else:
             label = self.data[index]['speaker']
-        return input, label
+        info = self.data[index].copy()
+        del info['cacheId']
+        del info['selected']
+        del info['embedding']
+        del info['_id']
+        del info['segments']
+        return input, label, info
 
 
 def cache_validate(id, cache):
