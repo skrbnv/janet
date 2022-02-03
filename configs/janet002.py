@@ -8,8 +8,8 @@ DATASET_DIR = "/mnt/nvme2tb/datasets/TIMIT2/datasets/"
 DATASET_TRAIN = "glued-1_92s-mel64-plain-train.dt"
 DATASET_VALIDATE = "glued-1_92s-mel64-plain-validate.dt"
 DATASET_TEST = "TIMIT-test.dt"
-TRAIN_CACHE = "/mnt/nvme2tb/datasets/TIMIT2/cache/glued-1_92s-mel64-plain"
-VALIDATE_CACHE = "/mnt/nvme2tb/datasets/TIMIT2/cache/glued-1_92s-mel64-plain"
+CACHE_TRAIN = "/mnt/nvme2tb/datasets/TIMIT2/cache/glued-1_92s-mel64-plain"
+CACHE_VALIDATE = "/mnt/nvme2tb/datasets/TIMIT2/cache/glued-1_92s-mel64-plain"
 TORCHINFO_SHAPE = (64, 1, 64, 192)  # shape or None
 
 # ------------------------- CONSTANTS -------------------------
@@ -25,8 +25,8 @@ DATASET_DIR = "/mnt/nvme2tb/datasets/voxceleb2/double/datasets/"
 DATASET_TRAIN = "train.dt"
 DATASET_VALIDATE = "validate.dt"
 DATASET_TEST = "TIMIT-test.dt"
-TRAIN_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/double/cache/train/"
-VALIDATE_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/double/cache/validate/"
+CACHE_TRAIN = "/mnt/nvme2tb/datasets/voxceleb2/double/cache/train/"
+CACHE_VALIDATE = "/mnt/nvme2tb/datasets/voxceleb2/double/cache/validate/"
 TORCHINFO_SHAPE = (64, 1, 64, 192)  # shape or None
 '''
 # MODEL

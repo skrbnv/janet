@@ -17,43 +17,38 @@ import time
 #import random
 import argparse
 import libs.multiprocessing as _mp
+import shutil
 
+# Arguments parser
 parser = argparse.ArgumentParser()
 parser.add_argument('--resume',
                     action='store_true',
                     default=False,
                     help='continue generating spectrograms')
-parser.add_argument('--validate',
-                    action='store_true',
-                    default=False,
-                    help='validate results during generation')
-parser.add_argument('--assemble',
-                    action='store_true',
-                    default=False,
-                    help='assemble generated speakers into dataset')
 args = parser.parse_args()
 RESUME = args.resume
-VALIDATE_RESULTS = args.validate
-ASSEMBLE = args.assemble
+
+# SETTINGS
+'''
 MEDIA_DIR = "/mnt/nvme2tb/datasets/TIMIT2/sorted/train"
-DATASET_TARGET = "/mnt/nvme2tb/datasets/TIMIT2/whitenoise-more/datasets/train.dt"
-PRIMARY_CACHE = "/mnt/nvme2tb/datasets/TIMIT2/whitenoise-more/cache/train"
+DATASET_TARGET = "/mnt/nvme2tb/datasets/TIMIT2/npmax/datasets/train.dt"
+PRIMARY_CACHE = "/mnt/nvme2tb/datasets/TIMIT2/npmax/cache/train"
 AUXILLARY_CACHE = None
 RECORDS_DUMP = None
 '''
 MEDIA_DIR = "/mnt/nvme2tb/datasets/voxceleb2/sorted/train"
-DATASET_TARGET = "/mnt/nvme2tb/datasets/voxceleb2/double/datasets/train.dt"
-PRIMARY_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/double/cache"
-AUXILLARY_CACHE = "/media/sergey/386217cc-3490-42e9-b723-c3a32cc41f1f/tmp/quick-train"
-RECORDS_DUMP = './records/train'
-'''
+DATASET_TARGET = "/mnt/nvme2tb/datasets/voxceleb2/fastrun/unfiltered/train.dt"
+PRIMARY_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/fastrun/unfiltered/cache/train"
+AUXILLARY_CACHE = "/mnt/nvme1tb/datasets/voxceleb2/fastrun/unfiltered/cache/train"
+RECORDS_DUMP = './records/fastrun'
+MERGE_CACHES = False
+
 # AUXILLARY_CACHE is a temp cache on second disk drive to increase number of IO ops
 # RECORDS_DUMP, if exists, defines temp location to store records due to delays if
 # we sync adding records to single dataset
 
 FORCE_SHAPE = False
 FORCE_SHAPE_SIZE = (224, 224)
-
 SLICE_MS = 1920
 STEP_MS = 100
 MEL_BANKS = 64
@@ -75,12 +70,11 @@ SKIPFIRSTFRAME = False
 
 #SPECTROGRAMS#
 MAX_SPEAKERS = 6000
-MAX_SAMPLES_PER_SPEAKER = 100
-MAX_SPECTROGRAMS_PER_SAMPLE = 50
+MAX_SAMPLES_PER_SPEAKER = 20
+MAX_SPECTROGRAMS_PER_SAMPLE = 5
 PICK_RANDOM_SPECTROGRAMS = True
 
-#AUGMENTATIONS
-WHITENOISE = (0, 10)
+VALIDATE_RESULTS = True
 
 _fn.report(" ************************************************** ")
 _fn.report(" **            Spectrograms generation           ** ")
@@ -100,28 +94,31 @@ _fn.report(
     f'   with up to {MAX_SPECTROGRAMS_PER_SAMPLE} {"_randomly selected_" if PICK_RANDOM_SPECTROGRAMS else ""} spectrograms per sample'
 )
 _fn.report(f'   for up to {MAX_SPEAKERS} speakers,')
+_fn.report(
+    f'Dumping records: {"True, to "+RECORDS_DUMP if RECORDS_DUMP else "False"}'
+)
 _fn.report(f'Melbanks: {MEL_BANKS}')
 _fn.report(f'Trimming audio, ms: {TRIM_MS}')
 _fn.report(f'Skipping first frame: {SKIPFIRSTFRAME}')
-if WHITENOISE:
-    _fn.report(
-        f'           with addition of extra samples with white noise {WHITENOISE}'
-    )
 input("Press any key to continue >> ")
 
-max_processes = cpu_count()
+max_processes = 8  # cpu_count()
 step = max_processes * 5
 folders = [f.path for f in os.scandir(MEDIA_DIR) if f.is_dir()]
 if MAX_SPEAKERS > 0:
     folders = folders[:MAX_SPEAKERS]
 
-D = Dataset(cache_path=PRIMARY_CACHE)
+cache_paths = [PRIMARY_CACHE] if AUXILLARY_CACHE is None else [
+    PRIMARY_CACHE, AUXILLARY_CACHE
+]
+D = Dataset(cache_paths=cache_paths)
 #cache = _cw.CachedWrites('/media/sergey/3Tb1/cache')
+if RECORDS_DUMP:
+    if not os.path.exists(RECORDS_DUMP):
+        os.mkdir(RECORDS_DUMP)
 if RESUME:
-    folders = [
-        f for f in folders
-        if os.path.basename(f) not in _fn.filelist(RECORDS_DUMP)
-    ]
+    dump = _fn.filelist(RECORDS_DUMP)
+    folders = [f for f in folders if os.path.basename(f) not in dump]
 limit = len(folders)
 config = {
     'MAX_SAMPLES_PER_SPEAKER': MAX_SAMPLES_PER_SPEAKER,
@@ -138,7 +135,6 @@ config = {
     'PICK_RANDOM_SPECTROGRAMS': PICK_RANDOM_SPECTROGRAMS,
     'FORCE_SHAPE': FORCE_SHAPE,
     'FORCE_SHAPE_SIZE': FORCE_SHAPE_SIZE,
-    'WHITENOISE': WHITENOISE
 }
 if limit > 0:
     total_expected = 0
@@ -216,9 +212,9 @@ else:
     #cache.finalize()
 
 if RECORDS_DUMP:
-    processed = [
-        os.path.join(RECORDS_DUMP, el) for el in _fn.filelist(RECORDS_DUMP)
-    ]
+    D.fileindex.rescan()
+    dump = _fn.filelist(RECORDS_DUMP)
+    processed = [os.path.join(RECORDS_DUMP, el) for el in dump]
     for i, el in enumerate(processed):
         with open(el, 'rb') as f:
             speaker, records = pickle.load(f)
@@ -226,17 +222,17 @@ if RECORDS_DUMP:
                 f'{i} out of {len(processed)}: saving and validating speaker {speaker}'
             )
             save_records(speaker, records, D)
+            D.fileindex.outdated = False
             # validate that cache file was created
             for record in records:
-                if AUXILLARY_CACHE and cache_validate(record['cacheId'],
-                                                      AUXILLARY_CACHE):
-                    continue
-                elif cache_validate(record['cacheId'], PRIMARY_CACHE):
+                if D.cache_validate(record['cacheId']):
                     continue
                 else:
                     raise IOError('Cache does not contain spectrogram file',
                                   record['cacheId'])
-if AUXILLARY_CACHE:
+if MERGE_CACHES:
     merge_cache(PRIMARY_CACHE, AUXILLARY_CACHE)
 
 D.save(DATASET_TARGET)
+if RECORDS_DUMP:
+    shutil.rmtree(RECORDS_DUMP)

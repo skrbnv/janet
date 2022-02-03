@@ -89,7 +89,7 @@ for j in tqdm.tqdm(range(5000)):
     else:
         continue
 
-    mixed = np.add(signal * .9, ambient_cut * .1)
+    mixed = np.add(signal * .75, ambient_cut * .25)
 
     #sf.write('signal.wav', signal, samplerate=22050)
     #sf.write('ambient.wav', ambient_cut, samplerate=22050)
@@ -99,6 +99,6 @@ for j in tqdm.tqdm(range(5000)):
     spgs = std(Z(A(mixed)))
     spgdiff = spgs - spgd
     letters = string.ascii_lowercase
-    fname = './diffs-music/' + ''.join(
+    fname = './diffs-music-louder/' + ''.join(
         random.choice(letters) for i in range(16)) + '.csv'
     np.savetxt(fname, spgdiff, delimiter=",")

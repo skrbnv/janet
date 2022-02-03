@@ -18,7 +18,7 @@ TORCHINFO_SHAPE = (64, 1, 64, 192)  # shape or None
 WANDBPROJECTNAME = 'triplets-voxceleb2-fastrun'
 EPOCHS_TOTAL = 9999
 # GPU
-GPU_ID = 0
+GPU_ID = 1
 # DATASETS & CACHE
 NUM_CLASSES = 5994
 
@@ -35,7 +35,7 @@ CACHE_VALIDATE = [
 TORCHINFO_SHAPE = (64, 1, 64, 192)  # shape or None
 
 # MODEL
-MODEL_LIBRARY_PATH = 'libs.models.janet_vox_v2f'
+MODEL_LIBRARY_PATH = 'libs.models.janet_vox_v2d'
 MODEL_NAME = 'Janet'
 # VISUALIZATION
 VIZ_DIR = "./visualization/"

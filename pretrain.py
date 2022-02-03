@@ -1,5 +1,5 @@
 import torch
-from configs.janet001 import TRAIN_CACHE
+from configs.janet001 import CACHE_TRAIN
 #import numpy as np
 #import gc
 import libs.functions as _fn
@@ -37,6 +37,10 @@ parser.add_argument('--freeze',
                     action='store_true',
                     default=False,
                     help='freeze extractor layers')
+parser.add_argument('--memcache',
+                    action='store_true',
+                    default=False,
+                    help='Cache data to memory, at least partially')
 parser.add_argument(
     '--config',
     action='store',
@@ -44,7 +48,7 @@ parser.add_argument(
     help='config filename (including path) imported as module, \
         defaults to configs.default')
 args = parser.parse_args()
-RESUME, WANDB, FREEZE, cfg_path = args.resume, args.wandb, args.freeze, args.config
+RESUME, WANDB, FREEZE, MEMCACHE, cfg_path = args.resume, args.wandb, args.freeze, args.memcache, args.config
 
 _fn.report(f'Importing configuration from \'{cfg_path}\'')
 CFG = import_module(cfg_path)
@@ -109,25 +113,30 @@ optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9)
 #optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 _fn.report("Optimizer initialized")
 
-#if RESUME:
-#    optimizer.load_state_dict(checkpoint['optimizer'])
-#    _fn.report("Optimizer state dict loaded from checkpoint")
+if RESUME:
+    optimizer.load_state_dict(checkpoint['optimizer'])
+    _fn.report("Optimizer state dict loaded from checkpoint")
 
 D = Dataset(filename=CFG.DATASET_TRAIN,
-            cache_paths=CFG.TRAIN_CACHE,
-            force_even=True)
+            cache_paths=CFG.CACHE_TRAIN,
+            force_even=True,
+            use_memcache=MEMCACHE)
 D_eval = D.get_randomized_subset_with_augmentation(
     max_records=50,
     speakers_filter=D.get_unique_speakers(),
-    augmentations_filter=[0])
-V = Dataset(filename=CFG.DATASET_VALIDATE, cache_paths=CFG.VALIDATE_CACHE)
-train_workers = len(CFG.TRAIN_CACHE) if isinstance(CFG.TRAIN_CACHE,
+    augmentations_filter=[0],
+    use_memcache=MEMCACHE)
+V = Dataset(filename=CFG.DATASET_VALIDATE,
+            cache_paths=CFG.CACHE_VALIDATE,
+            use_memcache=MEMCACHE)
+
+train_workers = len(CFG.CACHE_TRAIN) if isinstance(CFG.CACHE_TRAIN,
                                                    list) else 0
 train_loader = DataLoader(D,
                           batch_size=32,
                           shuffle=True,
                           num_workers=train_workers)
-valid_workers = len(CFG.VALIDATE_CACHE) if isinstance(CFG.VALIDATE_CACHE,
+valid_workers = len(CFG.CACHE_VALIDATE) if isinstance(CFG.CACHE_VALIDATE,
                                                       list) else 0
 valid_loader = DataLoader(V,
                           batch_size=32,
@@ -139,14 +148,10 @@ train_eval_loader = DataLoader(D_eval,
                                num_workers=train_workers)
 _fn.report("Full train and validation datasets loaded")
 
-anlib = NoiseLibrary(
-    CFG.AMBIENT_FILE) if 'ambient_noise' in CFG.AUGMENTATIONS else None
-if anlib is not None:
+ambient = NoiseLibrary(
+    CFG.AMBIENT_NOISE_FILE) if 'noise' in CFG.AUGMENTATIONS else None
+if ambient is not None:
     _fn.report('Ambient noises library loaded')
-mnlib = NoiseLibrary(
-    CFG.MUSIC_FILE) if 'music_noise' in CFG.AUGMENTATIONS else None
-if mnlib is not None:
-    _fn.report('Music noises library loaded')
 
 ########################################################
 ####          Setting up basic variables          ####
@@ -178,13 +183,9 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
                         model,
                         optimizer,
                         criterion,
-                        device,
                         augmentations=CFG.AUGMENTATIONS,
                         num_classes=CFG.NUM_CLASSES,
-                        extras={
-                            'ambient': anlib,
-                            'music': mnlib
-                        })
+                        extras={'ambient': ambient})
     lss.append(losses, epoch)
     _fn.report(f'Epoch loss: {lss.mean(epoch):.4f}')
     """
@@ -193,8 +194,8 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
         dataset = _db.visualize(D, epoch, samples=30)
     """
 
-    top1train, top5train, top1val, top5val = _cls.validate(
-        train_eval_loader, valid_loader, model, device)
+    top1train, top5train, top1val, top5val, val_loss = _cls.validate(
+        train_eval_loader, valid_loader, model, criterion)
 
     print(
         f"T1T: {top1train}, T5T: {top5train}, T1V: {top1val}, T5V: {top5val}")
@@ -204,6 +205,7 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
     if WANDB:
         wandb.log({
             "Loss": lss.mean(epoch),
+            "Validation loss": val_loss,
             "Top1 acc over training data": top1train,
             "Top5 acc over training data": top5train,
             "Top1 acc over validation data": top1val,

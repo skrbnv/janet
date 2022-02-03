@@ -97,9 +97,9 @@ _fn.report("Optimizer initialized")
 #    _fn.report("Optimizer state dict loaded from checkpoint")
 
 D = Dataset(filename=os.path.join(CFG.DATASET_DIR, CFG.DATASET_TRAIN),
-            cache_path=CFG.TRAIN_CACHE)
+            cache_path=CFG.CACHE_TRAIN)
 V = Dataset(filename=os.path.join(CFG.DATASET_DIR, CFG.DATASET_VALIDATE),
-            cache_path=CFG.VALIDATE_CACHE)
+            cache_path=CFG.CACHE_VALIDATE)
 _fn.report("Full train and validation datasets loaded")
 
 ########################################################
