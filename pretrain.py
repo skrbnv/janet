@@ -1,12 +1,12 @@
 import torch
-from configs.janet001 import CACHE_TRAIN
 #import numpy as np
 #import gc
 import libs.functions as _fn
-from libs.data import Dataset, NoiseLibrary
+from libs.data import Dataset
 import libs.losses as _losses
 #import libs.validation as _val
 import libs.classifier as _cls
+import libs.models as models
 from importlib import import_module
 import wandb
 import os
@@ -37,18 +37,14 @@ parser.add_argument('--freeze',
                     action='store_true',
                     default=False,
                     help='freeze extractor layers')
-parser.add_argument('--memcache',
-                    action='store_true',
-                    default=False,
-                    help='Cache data to memory, at least partially')
 parser.add_argument(
     '--config',
     action='store',
-    default='configs.janet001',
+    default='configs.janet001-timit',
     help='config filename (including path) imported as module, \
         defaults to configs.default')
 args = parser.parse_args()
-RESUME, WANDB, FREEZE, MEMCACHE, cfg_path = args.resume, args.wandb, args.freeze, args.memcache, args.config
+RESUME, WANDB, FREEZE, cfg_path = args.resume, args.wandb, args.freeze, args.config
 
 _fn.report(f'Importing configuration from \'{cfg_path}\'')
 CFG = import_module(cfg_path)
@@ -85,13 +81,13 @@ else:
     device = torch.device("cpu")
 _fn.report("Torch is using device:", device)
 
-Model = getattr(import_module(CFG.MODEL_LIBRARY_PATH), CFG.MODEL_NAME)
-model = Model()
+Model = getattr(models, CFG.MODEL_NAME)
+model = Model(num_classes=CFG.NUM_CLASSES)
 
 model.float()
 if torch.cuda.is_available():
     model.cuda()
-_fn.report(f"Model {CFG.MODEL_NAME} from {CFG.MODEL_LIBRARY_PATH} created")
+_fn.report(f"Model {CFG.MODEL_NAME} created")
 
 if RESUME:
     model.load_state_dict(checkpoint['state_dict'])
@@ -119,16 +115,12 @@ if RESUME:
 
 D = Dataset(filename=CFG.DATASET_TRAIN,
             cache_paths=CFG.CACHE_TRAIN,
-            force_even=True,
-            use_memcache=MEMCACHE)
+            force_even=True)
 D_eval = D.get_randomized_subset_with_augmentation(
     max_records=50,
     speakers_filter=D.get_unique_speakers(),
-    augmentations_filter=[0],
-    use_memcache=MEMCACHE)
-V = Dataset(filename=CFG.DATASET_VALIDATE,
-            cache_paths=CFG.CACHE_VALIDATE,
-            use_memcache=MEMCACHE)
+    augmentations_filter=[])
+V = Dataset(filename=CFG.DATASET_VALIDATE, cache_paths=CFG.CACHE_VALIDATE)
 
 train_workers = len(CFG.CACHE_TRAIN) if isinstance(CFG.CACHE_TRAIN,
                                                    list) else 0
@@ -147,11 +139,6 @@ train_eval_loader = DataLoader(D_eval,
                                shuffle=True,
                                num_workers=train_workers)
 _fn.report("Full train and validation datasets loaded")
-
-ambient = NoiseLibrary(
-    CFG.AMBIENT_NOISE_FILE) if 'noise' in CFG.AUGMENTATIONS else None
-if ambient is not None:
-    _fn.report('Ambient noises library loaded')
 
 ########################################################
 ####          Setting up basic variables          ####
@@ -185,7 +172,7 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
                         criterion,
                         augmentations=CFG.AUGMENTATIONS,
                         num_classes=CFG.NUM_CLASSES,
-                        extras={'ambient': ambient})
+                        extras={})
     lss.append(losses, epoch)
     _fn.report(f'Epoch loss: {lss.mean(epoch):.4f}')
     """

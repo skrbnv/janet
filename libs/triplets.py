@@ -4,6 +4,9 @@ import torch
 import libs.functions as _fn
 from libs.datasets import TripletDataset, CentroidDataset
 import multiprocessing as mp
+from libs.multiprocessing import set_affinity_on_worker
+from time import sleep
+from copy import copy, deepcopy
 
 
 def sub_generate_triplet_pair(D,
@@ -46,25 +49,41 @@ def generate_triplets_mp(D=None,
     if D is None:
         raise Exception('No dataset provided for triplets generation')
     aa, pp, nn = [], [], []
-    pool = mp.Pool(min(mp.cpu_count(), 8))
     speakers = D.get_unique_speakers()
+    #_fn.report(f'-- Extracted {len(speakers)} speakers')
     D.calculate_distances()
-    for i in range(0, len(speakers), pool._processes):
-        pool_data = [(D, limit, speaker, positive_strategy, negativesemihard,
-                      negativehard)
-                     for speaker in speakers[i:i + pool._processes]]
-        pool_output = pool.map(generate_triplets_mp_wrapper, pool_data)
-        for el in pool_output:
-            a, p, n = el
-            aa.extend(a)
-            pp.extend(p)
-            nn.extend(n)
+    #_fn.report('-- Distances calculated')
+
+    pool = mp.Pool(processes=mp.cpu_count(),
+                   initializer=set_affinity_on_worker)
+    results = []
+    for speaker in speakers:
+        result = pool.apply_async(
+            generate_triplets, (deepcopy(D), limit, speaker, positive_strategy,
+                                negativesemihard, negativehard))
+        results.append(result)
+    while True:
+        #sleep(1)
+        #print('\u263d', end='')
+        try:
+            ready = [result.ready() for result in results]
+            #print(f'{sum(ready)} out of {len(ready)}')
+            successful = [result.successful() for result in results]
+        except Exception:
+            continue
+        if all(successful):
+            #print('')
+            break
+        if all(ready) and not all(successful):
+            raise Exception(
+                f'Workers raised following exceptions {[result._value for result in results if not result.successful()]}'
+            )
+    for el in [result._value for result in results]:
+        a, p, n = el
+        aa.extend(a)
+        pp.extend(p)
+        nn.extend(n)
     return aa, pp, nn
-
-
-def generate_triplets_mp_wrapper(arg_tuple):
-    return generate_triplets(arg_tuple[0], arg_tuple[1], arg_tuple[2],
-                             arg_tuple[3], arg_tuple[4], arg_tuple[5])
 
 
 def generate_triplets(D,
@@ -114,7 +133,8 @@ def generate_triplets(D,
 
 
 def train_triplet_model(D, model, params, optimizer, anchors, positives,
-                        negatives, epoch, device, criterion):
+                        negatives, epoch, criterion):
+    device = next(model.parameters()).device
     # Prepare data for dataloader: embedding for anchor, spectrograms for positive and negative
     aa = [el['embedding'] for el in anchors]
     pp = [D.cache_read(el['cacheId']) for el in positives]

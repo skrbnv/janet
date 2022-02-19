@@ -1,7 +1,7 @@
 import numpy as np
 import libs.functions as _fn
 import libs.visualization as _viz
-#import libs.augmentations as _aug
+import libs.augmentations as _aug
 import random
 import torch
 import pickle
@@ -10,11 +10,11 @@ import os
 import itertools
 import gc
 from torch.utils.data import Dataset as UtilsDataset
-#from torch.utils.data import DataLoader
-#import psutil
+from torch.utils.data import DataLoader
+import psutil
 import shutil
-#import tqdm
-#import warnings
+import tqdm
+import warnings
 
 
 def cache_write(id, arr, cache=None):
@@ -45,12 +45,114 @@ def cache_write(id, arr, cache=None):
     return True
 
 
+class FileStorageIndex():
+    def __init__(self, paths) -> None:
+        self.paths = paths
+        self.storages = None
+        self.outdated = False
+        self.data = {}
+        self.rescan()
+
+    def rescan(self):
+        self.storages = []
+        for path in self.paths:
+            self.storages.extend(
+                [f.path for f in os.scandir(path) if f.is_dir()])
+        for storage in tqdm.tqdm(self.storages,
+                                 desc="Rebuilding cache indices"):
+            for f in os.listdir(storage):
+                if not os.path.isdir(os.path.join(storage, f)):
+                    self.data[f] = os.path.join(storage, f)
+
+    def where(self, key):
+        if key in self.data.keys():
+            return self.data[key]
+        else:
+            return None
+
+    def filter(self, keys):
+        dks = []
+        for key in self.data.keys():
+            if key not in keys:
+                dks.append(key)
+            else:
+                keys.remove(key)
+        for dk in dks:
+            del self.data[key]
+
+    def __len__(self):
+        return len(self.data)
+
+    def empty(self):
+        self.data = {}
+
+
+class MemCache():
+    def __init__(self,
+                 upload_fn,
+                 data_shape=(1, 64, 192),
+                 num_records=None) -> None:
+        self.max_size = abs(
+            int((psutil.virtual_memory().available - 2**34) /
+                (np.prod(np.array(data_shape)) * 4)))
+        if num_records is not None:
+            self.max_size = num_records if num_records < self.max_size else self.max_size
+        self.data = np.empty((self.max_size, 1, 64, 192), dtype=np.float32)
+        print(f"Memory cache initialized with {self.max_size} records")
+        for index in tqdm.tqdm(range(self.max_size),
+                               desc="Uploading data to memcache"):
+            self.data[index] = upload_fn(index)
+
+    def get(self, index):
+        if index >= self.max_size:
+            return None
+        else:
+            return self.data[index]
+
+    def __len__(self):
+        return len(self.data)
+
+
+class NoiseLibrary():
+    def __init__(self, fname) -> None:
+        self.library = torch.from_numpy(np.load(fname))  # np.fromfile(fname)
+        self.len = self.library.shape[1]
+
+    def slice(self, ln):
+        if ln > self.len:
+            raise Exception(
+                f'Requested length {ln} is too big for noise library with length {self.len}'
+            )
+        start = random.randint(0, self.len - ln)
+        return self.library[:, start:start + ln]
+
+    def overlay(self, arr, amplif=1.):
+        ln = arr.shape[1]
+        output = torch.add(arr, self.slice(ln).to(arr.device), alpha=amplif)
+        return output
+
+    def batch_overlay(self, arr, amplif=1.):
+        if not (len(arr.shape) == 3 or len(arr.shape) == 4):
+            raise Exception(
+                f'Expected dim = 3 or 4 for batch overlay noise, got {len(arr.shape)}'
+            )
+        initial_shape = arr.shape
+        if len(arr.shape) == 4:
+            arr = arr.flatten(0, 1)
+        output = torch.empty(arr.shape, dtype=torch.float32).to(arr.device)
+        for i in range(arr.shape[0]):
+            output[i] = self.overlay(arr[i], amplif)
+        return output.reshape(initial_shape)
+
+
 class Dataset(UtilsDataset):
     def __init__(self,
                  cache_paths,
                  data=None,
                  filename=None,
-                 force_even=False):
+                 force_even=False,
+                 fileindex=None,
+                 use_memcache=False):
         if data is not None and filename is not None:
             raise Exception(
                 'Cannot create dataset with both data and filename passed as parameters'
@@ -74,13 +176,37 @@ class Dataset(UtilsDataset):
             self.make_even()
             self.speakers = self.get_unique_speakers()
 
+        if fileindex is None:
+            self.fileindex = FileStorageIndex(paths=self.cache_paths)
+        else:
+            self.fileindex = fileindex
+            #if len(self.data) < len(self.fileindex) and len(self.data) > 0:
+            #    self.fileindex.filter(
+            #        [el['cacheId'] for el in self.data.values()])
+
+        if use_memcache:
+            self.usememcache = True
+            self.memcache = MemCache(num_records=min(len(self.fileindex),
+                                                     len(self.data)),
+                                     upload_fn=self.cache_read_wrapper)
+        else:
+            self.usememcache = False
+
+        # if all data in memory release file index
+        if self.usememcache is True and len(self.memcache) == len(
+                self.data) and len(self.data) > 0:
+            self.fileindex.empty()
+
     def __getitem__(self, index, process_label=1):
         '''
         process_label = 0: Do not process
                       = 1: One Hot encoding
                       = 2: index encoding
         '''
-        input = self.cache_read(self.data[index]['cacheId'])
+        if self.usememcache and index < self.memcache.max_size:
+            input = self.memcache.get(index)
+        else:
+            input = self.cache_read(self.data[index]['cacheId'])
 
         if process_label == 1:
             label = self.encode_speaker_one_hot(self.data[index]['speaker'])
@@ -106,6 +232,7 @@ class Dataset(UtilsDataset):
     def load(self, filename):
         with open(filename, 'rb') as handle:
             self.data = pickle.load(handle)
+        #self.fileindex.rescan()
         return True
 
     def save(self, filename):
@@ -134,6 +261,7 @@ class Dataset(UtilsDataset):
         self.data[pos] = record
         self.data[pos]['_id'] = pos
         self.speakers = None
+        self.fileindex.outdated = True
         return True
 
     def encode_speaker_one_hot(self, speaker):
@@ -155,25 +283,23 @@ class Dataset(UtilsDataset):
             return None
 
     def cache_write(self, id, obj):
+        self.fileindex.outdated = True
         return cache_write(id, obj, cache=random.choice(self.cache_paths))
 
     def cache_read_wrapper(self, index):
         return self.cache_read(self.data[index]['cacheId'])
 
-    def get_location(self, id):
-        for cache_path in self.cache_paths:
-            storages = [f.path for f in os.scandir(cache_path) if f.is_dir()]
-            for storage in storages:
-                if os.path.isfile(os.path.join(storage, id)):
-                    return storage
-
     def cache_read(self, id):
-        with open(os.path.join(self.get_location(id), id), 'rb') as f:
+        # scan filesystem on first start
+        if self.fileindex.outdated is True:
+            self.fileindex.rescan()
+        # or lookup on filesystem
+        with open(self.fileindex.where(id), 'rb') as f:
             try:
                 arr = np.load(f)
             except Exception as e:
                 raise IOError(
-                    f'Encountered exception when trying to read file {id}, exception message: {e}'
+                    f'Encountered exception when trying to read file {self.fileindex.where(id)}, exception message: {e}'
                 )
         return arr  # np.squeeze(arr, axis=0)  # .T
 
@@ -251,10 +377,13 @@ class Dataset(UtilsDataset):
         for speaker in speakers:
             if s is not None and s != speaker:
                 continue
-            embeddings = [
-                el['embedding'] for el in self.data.values()
-                if el['speaker'] == speaker and el['embedding'] is not None
+            embeddings = []
+            records = [
+                el for el in self.data.values() if el['speaker'] == speaker
             ]
+            for record in records:
+                if record['embedding'] is not None:
+                    embeddings.append(record['embedding'])
             centroids.append([speaker, np.mean(embeddings, axis=0)])
         if s is not None:
             return centroids[0]
@@ -286,13 +415,14 @@ class Dataset(UtilsDataset):
 
     def update_embeddings(self, model, batch_size=32):
         device = next(model.parameters()).device
-        model.eval()
         stop_value = self.__len__() - 1
         keys = []
         spectrograms = []
         for i, key in enumerate(self.data.keys()):
             keys.append(key)
-            spg = self.cache_read(self.data[key]['cacheId'])
+            spg = self.memcache.get(i)
+            if spg is None:
+                spg = self.cache_read(self.data[key]['cacheId'])
             spectrograms.append(spg)
             if len(keys) == batch_size or i == stop_value:
                 with torch.no_grad():
@@ -305,7 +435,6 @@ class Dataset(UtilsDataset):
                 spectrograms = []
             if i % 10000 == 0:
                 gc.collect()
-        model.train()
         return True
 
     def get_records_by_sample(self, sample):
@@ -453,7 +582,8 @@ class Dataset(UtilsDataset):
     def get_randomized_subset_with_augmentation(self,
                                                 max_records,
                                                 speakers_filter,
-                                                augmentations_filter=[]):
+                                                augmentations_filter=[],
+                                                use_memcache=False):
         # adding sorted just in case order follows initial order during creation,
         # when same speaker records were added sequentially
         _fn.report(
@@ -485,13 +615,20 @@ class Dataset(UtilsDataset):
                 # got to the record with next speaker
                 records = [{'key': key, 'value': value}]
                 current_speaker = value['speaker']
-        return Dataset(data=output, cache_paths=self.cache_paths)
+        return Dataset(data=output,
+                       cache_paths=self.cache_paths,
+                       fileindex=self.fileindex,
+                       use_memcache=use_memcache)
 
-    def get_randomized_subset(self, max_records, speakers_filter):
+    def get_randomized_subset(self,
+                              max_records,
+                              speakers_filter,
+                              use_memcache=False):
         return self.get_randomized_subset_with_augmentation(
             speakers_filter=speakers_filter,
             augmentations_filter=[],
-            max_records=max_records)
+            max_records=max_records,
+            use_memcache=use_memcache)
 
     def augment(self, augmentations=[], extras={}):
         # ignore label smoothing (!?)
@@ -548,6 +685,11 @@ class Dataset(UtilsDataset):
     count = __len__
     length = __len__
     total = __len__
+
+    def cache_validate(self, id):
+        if self.fileindex.outdated is True:
+            self.fileindex.rescan()
+        return True if self.fileindex.where(id) is not None else False
 
 
 def cache_validate(id, cache):

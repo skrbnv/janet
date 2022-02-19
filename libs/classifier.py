@@ -139,39 +139,4 @@ def validate(train_loader, valid_loader, model, criterion):
     total, t1, t5, loss = validation_loop(valid_loader, model, criterion)
     top1val = np.round(100 * (t1 / total).cpu().numpy(), decimals=2)
     top5val = np.round(100 * (t5 / total).cpu().numpy(), decimals=2)
-    '''
-    D.reset()
-    valCandidates = D.get_random_records(limit_per_speaker=10, flag=False)
-    top5train = np.round(
-        100 *
-        top5(candidates=[np.squeeze(el['embedding']) for el in valCandidates],
-             centroids=centroids,
-             truths=[el['speaker'] for el in valCandidates]),
-        decimals=2)
-
-    _fn.report("Top 1 accuracy dist(sample, centroids): " + str(top1train) +
-               "%")
-    _fn.report("Top 5 accuracy dist(sample, centroids): " + str(top5train) +
-               "%")
-
-    V.reset()
-    valCandidates = V.get_random_records(limit_per_speaker=10, flag=False)
-    top1val = np.round(
-        100 *
-        top1(candidates=[np.squeeze(el['embedding']) for el in valCandidates],
-             centroids=centroids,
-             truths=[el['speaker'] for el in valCandidates]),
-        decimals=2)
-    top5val = np.round(
-        100 *
-        top5(candidates=[np.squeeze(el['embedding']) for el in valCandidates],
-             centroids=centroids,
-             truths=[el['speaker'] for el in valCandidates]),
-        decimals=2)
-    _fn.report("Top 1 val accuracy dist(sample, centroids): " + str(top1val) +
-               "%")
-    _fn.report("Top 5 val accuracy dist(sample, centroids): " + str(top5val) +
-               "%")
-    return top1train, top5train, top1val, top5val
-    '''
     return top1train, top5train, top1val, top5val, loss

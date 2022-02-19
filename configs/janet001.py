@@ -18,37 +18,37 @@ TORCHINFO_SHAPE = (64, 1, 64, 192)  # shape or None
 WANDBPROJECTNAME = 'triplets-voxceleb2-fastrun'
 EPOCHS_TOTAL = 9999
 # GPU
-GPU_ID = 0
+GPU_ID = 1
 # DATASETS & CACHE
 NUM_CLASSES = 5994
 
-DATASET_TRAIN = "/mnt/nvme2tb/datasets/voxceleb2/fastrun/unfiltered/train.dt"
+DATASET_TRAIN = "/mnt/nvme2tb/datasets/voxceleb2/final/train.dt"
 CACHE_TRAIN = [
-    "/mnt/nvme2tb/datasets/voxceleb2/fastrun/unfiltered/cache/train",
-    "/mnt/nvme1tb/datasets/voxceleb2/fastrun/unfiltered/cache/train"
+    "/mnt/nvme2tb/datasets/voxceleb2/final/cache/train",
+    "/mnt/nvme1tb/datasets/voxceleb2/final/cache/train"
 ]
-DATASET_VALIDATE = "/mnt/nvme2tb/datasets/voxceleb2/fastrun/unfiltered/validate.dt"
+DATASET_VALIDATE = "/mnt/nvme2tb/datasets/voxceleb2/final/validate.dt"
 CACHE_VALIDATE = [
-    "/mnt/nvme2tb/datasets/voxceleb2/fastrun/unfiltered/cache/validate",
-    "/mnt/nvme1tb/datasets/voxceleb2/fastrun/unfiltered/cache/validate"
+    "/mnt/nvme2tb/datasets/voxceleb2/final/cache/validate",
+    "/mnt/nvme1tb/datasets/voxceleb2/final/cache/validate"
 ]
 TORCHINFO_SHAPE = (64, 1, 64, 192)  # shape or None
 
 # MODEL
-MODEL_LIBRARY_PATH = 'libs.models.janet_vox_v2f'
 MODEL_NAME = 'Janet'
+TRIPLET_CLASSIFIER_NAME = 'ClassifierEmbeddings'
 # VISUALIZATION
 VIZ_DIR = "./visualization/"
 # CHECKPOINTS
-RUN_ID = '1y16lffl'
-CHECKPOINTFILENAME = "./checkpoints/1y16lffl004.dict"
+RUN_ID = '1fbv3wj9'
+CHECKPOINTFILENAME = "./checkpoints/1fbv3wj9015.dict"
 # SUBSETS
 USE_SUBSETS = True
 SUBSET_SPEAKERS = 64
 SUBSET_SPECTROGRAMS_PER_SPEAKER = 50
 # TRIPLETS
 MARGIN = .3
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 TRIPLETSPERCLASS = 20
 POSITIVECRITERION = 'Random'  # 'Random' vs 'Hard'.
 # When POSITIVECRITERION == 'Hard' closest positive AND farthest
@@ -58,5 +58,6 @@ NEGATIVESEMIHARD = 1  # select semi-hard negatives
 NEGATIVEHARD = 1  # select hard negatives
 #AUGMENTATIONS = ['echo', 'gradclip']
 #AMBIENT_NOISE_FILE = None
-AUGMENTATIONS = []  # mix, erase, noise, gradclip, label_smoothing
+AUGMENTATIONS = ['mix', 'erase', 'label_smoothing'
+                 ]  # mix, erase, noise, gradclip, label_smoothing
 AMBIENT_NOISE_FILE = '/mnt/nvme2tb/datasets/voxceleb2/spectrogram_noises/noises.npy'

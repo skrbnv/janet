@@ -37,10 +37,10 @@ AUXILLARY_CACHE = None
 RECORDS_DUMP = None
 '''
 MEDIA_DIR = "/mnt/nvme2tb/datasets/voxceleb2/sorted/train"
-DATASET_TARGET = "/mnt/nvme2tb/datasets/voxceleb2/fastrun/unfiltered/train.dt"
-PRIMARY_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/fastrun/unfiltered/cache/train"
-AUXILLARY_CACHE = "/mnt/nvme1tb/datasets/voxceleb2/fastrun/unfiltered/cache/train"
-RECORDS_DUMP = './records/fastrun'
+DATASET_TARGET = "/mnt/nvme2tb/datasets/voxceleb2/final/train.dt"
+PRIMARY_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/final/cache/train"
+AUXILLARY_CACHE = "/mnt/nvme1tb/datasets/voxceleb2/final/cache/train"
+RECORDS_DUMP = './records/final'
 MERGE_CACHES = False
 
 # AUXILLARY_CACHE is a temp cache on second disk drive to increase number of IO ops
@@ -70,8 +70,8 @@ SKIPFIRSTFRAME = False
 
 #SPECTROGRAMS#
 MAX_SPEAKERS = 6000
-MAX_SAMPLES_PER_SPEAKER = 20
-MAX_SPECTROGRAMS_PER_SAMPLE = 5
+MAX_SAMPLES_PER_SPEAKER = 100
+MAX_SPECTROGRAMS_PER_SAMPLE = 50
 PICK_RANDOM_SPECTROGRAMS = True
 
 VALIDATE_RESULTS = True
@@ -102,8 +102,8 @@ _fn.report(f'Trimming audio, ms: {TRIM_MS}')
 _fn.report(f'Skipping first frame: {SKIPFIRSTFRAME}')
 input("Press any key to continue >> ")
 
-max_processes = 8  # cpu_count()
-step = max_processes * 5
+max_processes = cpu_count()
+step = max_processes * 10
 folders = [f.path for f in os.scandir(MEDIA_DIR) if f.is_dir()]
 if MAX_SPEAKERS > 0:
     folders = folders[:MAX_SPEAKERS]

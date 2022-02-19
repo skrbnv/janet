@@ -10,6 +10,7 @@ import libs.losses as _losses
 import libs.triplets as _tpl
 #import libs.classifier as _cls
 import libs.validation as _val
+import libs.training as _tr
 from importlib import import_module
 import wandb
 import os
@@ -36,7 +37,7 @@ parser.add_argument('--resume',
 parser.add_argument(
     '--config',
     action='store',
-    default='configs.janet001',
+    default='configs.janet001-timit',
     help='config filename (including path) imported as module, \
         defaults to configs.default')
 args = parser.parse_args()
@@ -135,7 +136,7 @@ if RESUME:
     _fn.report("Initial epoch set to", initial_epoch)
     # finally release memory under checkpoint
     del checkpoint
-criterion = _losses.CustomTripletMarginLoss(CFG.MARGIN)
+criterion = _losses.CentroidLoss(CFG.NUM_CLASSES)
 
 # Pre-generate triplet sets based on Spectogram class
 # We have
@@ -166,47 +167,13 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
         Dsub = D.get_randomized_subset(
             speakers_filter=batch_speakers,
             max_records=CFG.SUBSET_SPECTROGRAMS_PER_SPEAKER)
-
-        Dsub.augment(augmentations=CFG.AUGMENTATIONS, extras={})
-        '''
-        losses = _cls.train(train_loader,
-                            model,
-                            optimizer,
-                            criterion,
-                            augmentations=CFG.AUGMENTATIONS,
-                            num_classes=CFG.NUM_CLASSES,
-                            extras={'ambient': ambient})
-        lss.append(losses, epoch)
-        _fn.report(f'Epoch loss: {lss.mean(epoch):.4f}')
-        '''
-
-        _fn.report("Updating embeddings")
-        Dsub.update_embeddings(model)
-
-        _fn.report("Generating triplets")
-        Dsub.reset()
-        anchors, positives, negatives = _tpl.generate_triplets_mp(
-            Dsub, CFG.TRIPLETSPERCLASS, CFG.POSITIVECRITERION,
-            CFG.NEGATIVESEMIHARD, CFG.NEGATIVEHARD)
-
-        _fn.report(f'Triplets generated: {len(anchors)}')
-        triplets_generated_per_epoch += len(anchors)
+        train_loader = DataLoader(Dsub, batch_size=64, shuffle=True)
 
         _fn.report("Training cycle")
-        model_params = {
-            'batch_size': CFG.BATCH_SIZE,
-            'shuffle': True,
-            'num_workers': 0
-        }
-        losses = _tpl.train_triplet_model(Dsub,
-                                          model=model,
-                                          params=model_params,
-                                          optimizer=optimizer,
-                                          anchors=anchors,
-                                          positives=positives,
-                                          negatives=negatives,
-                                          epoch=epoch,
-                                          criterion=criterion)
+        losses = _tr.training_loop(train_loader,
+                                   model=model,
+                                   optimizer=optimizer,
+                                   criterion=criterion)
         _fn.report(f'Loss: {np_mean(losses):.4f}')
         lss.append(losses, epoch)
     _fn.report(f'Epoch loss: {lss.mean(epoch):.4f}')

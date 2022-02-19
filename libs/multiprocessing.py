@@ -15,7 +15,7 @@ from pedalboard import (
 
 def set_affinity_on_worker():
     """When a new worker process is created, the affinity is set to all CPUs"""
-    os.system("taskset -p 0xffffff %d" % os.getpid())
+    os.system("taskset -p 0xffffff %d >/dev/null 2>&1" % os.getpid())
 
 
 def mp_worker(id, folder, length, config):

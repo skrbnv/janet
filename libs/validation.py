@@ -68,16 +68,14 @@ def sequential_probability(candidates, centroids, truth):
         return (False, False)
 
 
-def validate(model, D, V, device):
+def validate(model, D, V):
     _fn.report("-------------- Validation ----------------")
     # retrieve non-augmented records for dataset
     _fn.report("Updating embeddings")
     # Test on smaller subsets (64 speakers), but every 10 epoch test on full set
 
-    model.eval()
-    D.update_embeddings(model=model.innerModel, device=device)
-    V.update_embeddings(model=model.innerModel, device=device)
-    model.train()
+    D.update_embeddings(model)
+    V.update_embeddings(model)
 
     _fn.report("Calculating centroids")
     centroids = D.calculate_centroids()
@@ -98,10 +96,8 @@ def validate(model, D, V, device):
              truths=[el['speaker'] for el in valCandidates]),
         decimals=2)
 
-    _fn.report("Top 1 accuracy dist(sample, centroids): " + str(top1train) +
-               "%")
-    _fn.report("Top 5 accuracy dist(sample, centroids): " + str(top5train) +
-               "%")
+    _fn.report(f'Top 1 training accuracy dist(sample, centroids): {top1train}')
+    _fn.report(f'Top 5 training accuracy dist(sample, centroids): {top5train}')
 
     V.reset()
     valCandidates = V.get_random_records(limit_per_speaker=10, flag=False)
@@ -117,8 +113,6 @@ def validate(model, D, V, device):
              centroids=centroids,
              truths=[el['speaker'] for el in valCandidates]),
         decimals=2)
-    _fn.report("Top 1 val accuracy dist(sample, centroids): " + str(top1val) +
-               "%")
-    _fn.report("Top 5 val accuracy dist(sample, centroids): " + str(top5val) +
-               "%")
+    _fn.report(f'Top 1 validation accuracy dist(sample, centroids): {top1val}')
+    _fn.report(f'Top 5 validation accuracy dist(sample, centroids): {top5val}')
     return top1train, top5train, top1val, top5val

@@ -97,12 +97,12 @@ class Extractor(nn.Module):
         ]
         seq[-1].wa = nn.Identity()
         self.funnel = nn.Sequential(*seq)
-        self.avgpool = nn.AdaptiveAvgPool2d(1)
+        #self.avgpool = nn.AdaptiveAvgPool2d(1)
 
     def forward(self, x):
         x = self.adjust(x)
         x = self.funnel(x)
-        x = self.avgpool(x)
+        #x = self.avgpool(x)
         return x.flatten(1)
 
 
@@ -117,6 +117,18 @@ class Classifier(nn.Module):
         x = self.linear1(x)
         # x = self.dropout(x)
         # x = self.linear2(x)
+        return x
+
+
+class ClassifierEmbeddings(nn.Module):
+    def __init__(self, size_in=1024, size_out=128) -> None:
+        super().__init__()
+        self.size_in = size_in
+        self.size_out = size_out
+        self.linear1 = nn.Linear(self.size_in, self.size_out)
+
+    def forward(self, x):
+        x = self.linear1(x)
         return x
 
 
@@ -135,10 +147,10 @@ class ClassifierWithDropout(nn.Module):
 
 
 class Janet(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, midsize=1024, num_classes=5994) -> None:
         super().__init__()
         self.extractor = Extractor()
-        self.classifier = Classifier(size_in=1024, size_out=5994)
+        self.classifier = Classifier(size_in=midsize, size_out=num_classes)
         #self.classifier = ClassifierWithDropout(1024, 2048, .5, 5994)
 
     def forward(self, x):
