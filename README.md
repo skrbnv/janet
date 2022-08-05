@@ -1,34 +1,11 @@
-# Project Title
+# Improving Text-Independent Speaker Identification by Introducing Elements of Attention to Convolutional Layout
 
 
 
+## Installing
+pip install -r requirements.txt
 
-### Prerequisites
+# Code
+First, you need to generate spectrograms and index for chosen dataset. Look into /utils/ for some useful scripts, then run generate.py
 
-What things you need to install the software and how to install them.
-
-```
-Give examples
-```
-
-### Installing
-
-A step by step series of examples that tell you how to get a development env running.
-
-Say what the step will be
-
-```
-Give the example
-```
-
-And repeat
-
-```
-until finished
-```
-
-End with an example of getting some data out of the system or using it for a little demo.
-
-## Usage <a name = "usage"></a>
-
-Add notes about how to use the system.
+To train, run train.py -h, with configs in /configs/
