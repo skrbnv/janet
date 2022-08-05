@@ -1,5 +1,4 @@
 import libs.data as _db
-import numpy as np
 import cv2
 
 SOURCE_DATASET = '/media/my3bikaht/EXT4/datasets/TIMIT2/datasets/glued-2s-mel80-plain-train.dt'

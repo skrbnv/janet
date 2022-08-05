@@ -7,9 +7,7 @@ import pickle
 import cv2
 from pedalboard import (
     Pedalboard,
-    Compressor,
-    HighpassFilter,
-    NoiseGate,
+    HighpassFilter
 )
 
 

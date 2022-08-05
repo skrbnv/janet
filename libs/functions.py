@@ -1,11 +1,8 @@
-from genericpath import isfile
 import os
 import datetime
-#import soundfile as sf
 import numpy as np
 import librosa
 import librosa.display
-from numpy.lib import split
 import torch
 from scipy.spatial.distance import cosine
 import warnings
@@ -14,16 +11,23 @@ import math
 from string import ascii_lowercase
 from scipy.spatial.distance import cdist
 import libs.visualization as _viz
-#import matplotlib.pyplot as plt
 import sys
 from glob import glob
 import re
-#from importlib import import_module
+import yaml
 
 global ambientmemcache
 global musicmemcache
 musicmemcache = {}
 ambientmemcache = {}
+
+
+def load_yaml(path='default.yaml'):
+    if not path.endswith('.yaml'):
+        path += '.yaml'
+    with open(os.path.join('./configs/', path)) as stream:
+        config = yaml.safe_load(stream)
+    return config
 
 
 # output current timestamp with message to console
@@ -92,14 +96,14 @@ def checkpoint(id=None, data=None, path='./checkpoints', cleanup=True):
         return False
     chkptfname = os.path.join(path, f'{id}{(counter+1):03}.dict')
     torch.save(data, chkptfname)
-    if not isfile(chkptfname):
+    if not os.path.isfile(chkptfname):
         raise IOError(f'Checkpoint {chkptfname} was not saved')
     else:
         report(f'Checkpoint {chkptfname} saved')
     if cleanup:
         for rm in removables:
             os.remove(rm)
-    if not isfile(chkptfname):
+    if not os.path.isfile(chkptfname):
         raise IOError(f'Checkpoint {chkptfname} was deleted by cleanup')
 
 

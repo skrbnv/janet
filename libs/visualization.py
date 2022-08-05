@@ -1,9 +1,7 @@
 import numpy as np
 import libs.functions as _fn
-# from math import floor
 from sklearn.decomposition import PCA
 from openTSNE import TSNE
-# from operator import add
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 

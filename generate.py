@@ -1,20 +1,9 @@
-#import enum
-#import numpy as np
 import libs.functions as _fn
-#import libs.spg_cached_writes as _cw
 from libs.data import Dataset, cache_validate, merge_cache, save_records, cache_summary
 import os
-#import cv2
 import pickle
 from multiprocessing import Pool, cpu_count
-#from datetime import datetime
-#import soundfile as sf
-#import librosa
-##import librosa.display
-#import matplotlib.pyplot as plt
-#import soundfile as sf
 import time
-#import random
 import argparse
 import libs.multiprocessing as _mp
 import shutil
@@ -30,17 +19,18 @@ RESUME = args.resume
 
 # SETTINGS
 '''
-MEDIA_DIR = "/mnt/nvme2tb/datasets/TIMIT2/sorted/train"
-DATASET_TARGET = "/mnt/nvme2tb/datasets/TIMIT2/npmax/datasets/train.dt"
-PRIMARY_CACHE = "/mnt/nvme2tb/datasets/TIMIT2/npmax/cache/train"
+MEDIA_DIR = "/mnt/nvme2tb/datasets/TIMIT2/sorted/validate"
+DATASET_TARGET = "/mnt/nvme2tb/datasets/TIMIT2/seq/datasets/validate.dt"
+PRIMARY_CACHE = "/mnt/nvme2tb/datasets/TIMIT2/seq/cache/validate"
 AUXILLARY_CACHE = None
 RECORDS_DUMP = None
+MERGE_CACHES = False
 '''
-MEDIA_DIR = "/mnt/nvme2tb/datasets/voxceleb2/sorted/train"
-DATASET_TARGET = "/mnt/nvme2tb/datasets/voxceleb2/final/train.dt"
-PRIMARY_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/final/cache/train"
-AUXILLARY_CACHE = "/mnt/nvme1tb/datasets/voxceleb2/final/cache/train"
-RECORDS_DUMP = './records/final'
+MEDIA_DIR = "/mnt/nvme2tb/datasets/voxceleb2/sorted/validate"
+DATASET_TARGET = "/mnt/nvme2tb/datasets/voxceleb2/tiny/validate.dt"
+PRIMARY_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/tiny/cache/validate"
+AUXILLARY_CACHE = "/mnt/nvme1tb/datasets/voxceleb2/tiny/cache/validate"
+RECORDS_DUMP = './records/tmp'
 MERGE_CACHES = False
 
 # AUXILLARY_CACHE is a temp cache on second disk drive to increase number of IO ops
@@ -69,12 +59,11 @@ SKIPFIRSTFRAME = False
 # a lot of examples ending up in outliers
 
 #SPECTROGRAMS#
-MAX_SPEAKERS = 6000
-MAX_SAMPLES_PER_SPEAKER = 100
-MAX_SPECTROGRAMS_PER_SAMPLE = 50
+MAX_SPEAKERS = 5994
+MAX_SAMPLES_PER_SPEAKER = 10
+MAX_SPECTROGRAMS_PER_SAMPLE = 2
 PICK_RANDOM_SPECTROGRAMS = True
-
-VALIDATE_RESULTS = True
+VALIDATE_RESULTS = False
 
 _fn.report(" ************************************************** ")
 _fn.report(" **            Spectrograms generation           ** ")
@@ -212,7 +201,6 @@ else:
     #cache.finalize()
 
 if RECORDS_DUMP:
-    D.fileindex.rescan()
     dump = _fn.filelist(RECORDS_DUMP)
     processed = [os.path.join(RECORDS_DUMP, el) for el in dump]
     for i, el in enumerate(processed):
@@ -222,10 +210,12 @@ if RECORDS_DUMP:
                 f'{i} out of {len(processed)}: saving and validating speaker {speaker}'
             )
             save_records(speaker, records, D)
-            D.fileindex.outdated = False
             # validate that cache file was created
             for record in records:
-                if D.cache_validate(record['cacheId']):
+                if cache_validate(record['cacheId'], PRIMARY_CACHE) or (
+                        AUXILLARY_CACHE is not None
+                        and len(AUXILLARY_CACHE) > 0 and cache_validate(
+                            record['cacheId'], AUXILLARY_CACHE)):
                     continue
                 else:
                     raise IOError('Cache does not contain spectrogram file',

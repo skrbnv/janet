@@ -1,16 +1,11 @@
 import torch
-#import torchvision.transforms as transforms
-import numpy as np
 from timm.data.mixup import Mixup
 from timm.data.random_erasing import RandomErasing
 import random
-#from timm.data.transforms import RandomResizedCropAndInterpolation
-#import warnings
-#import librosa
 
 
 def erase(inputs, classes):
-    erase_fn = RandomErasing(probability=1)
+    erase_fn = RandomErasing()
     return erase_fn(inputs), classes
 
 
@@ -19,14 +14,15 @@ def mixup_cutmix(inputs,
                  num_classes,
                  prob=1,
                  mixup_alpha=[.2, 1.],
-                 cutmix_alpha=[.2, 1.]):
+                 cutmix_alpha=[.2, 1.],
+                 label_smoothing=0):
     mixup_alpha_choice = random.uniform(mixup_alpha[0], mixup_alpha[1])
     mixup_cutmix_choice = random.uniform(cutmix_alpha[0], cutmix_alpha[1])
     mixup_args = {
         'mixup_alpha': mixup_alpha_choice,
         'cutmix_alpha': mixup_cutmix_choice,
         'cutmix_minmax': None,
-        'prob': 1.,
+        'prob': .5,
         'switch_prob': 0.5,
         'mode': 'batch',
         'label_smoothing': 0,
@@ -34,23 +30,6 @@ def mixup_cutmix(inputs,
     }
     mixup_fn = Mixup(**mixup_args)
     return mixup_fn(inputs, classes)
-
-
-'''
-def cutmix(inputs, classes, num_classes):
-    cutmix_args = {
-        'mixup_alpha': 0.,
-        'cutmix_alpha': 1.0,
-        'cutmix_minmax': None,
-        'prob': 1.0,
-        'switch_prob': 0.,
-        'mode': 'batch',
-        'label_smoothing': 0,
-        'num_classes': num_classes
-    }
-    cutmix_fn = Mixup(**cutmix_args)
-    return cutmix_fn(inputs, classes)
-'''
 
 
 def smooth_one_hot(true_labels, smoothing=0.0):

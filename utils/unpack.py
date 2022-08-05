@@ -1,5 +1,3 @@
-import numpy as np
-import libs.functions as _fn
 from libs.data import Dataset
 import os
 import pickle

@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.spatial.distance import cdist
 import libs.functions as _fn
-#import libs.data as _db
 
 
 def top1(candidates, centroids, truths):

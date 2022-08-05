@@ -1,11 +1,8 @@
 import torch
 import torch.nn as nn
-''' V8 WA block after each 2d convolution, either funneled or not '''
 
 
 class WeightedAttention(nn.Module):
-    ''' identity not going to work if h != w '''
-    ''' also if h != w matmul output will not match parent convolution '''
     def __init__(self, planes, h, w, residual=False) -> None:
         super().__init__()
         self.weights = nn.Parameter(torch.Tensor(planes, h, h))
@@ -33,7 +30,7 @@ class WeightedAttention(nn.Module):
         return x
 
 
-class Conv2dWA(nn.Module):
+class Conv2dWM(nn.Module):
     def __init__(self,
                  input_shape,
                  planes_in,
@@ -56,7 +53,7 @@ class Conv2dWA(nn.Module):
         self.bn = nn.BatchNorm2d(planes_out)
         self.activation = nn.GELU()
         self.extras = nn.Sequential(*extras) if extras is not None else None
-        self.wa = WeightedAttention(planes_out, input_shape[0], input_shape[1],
+        self.wm = WeightedAttention(planes_out, input_shape[0], input_shape[1],
                                     residual)
 
     def forward(self, x):
@@ -65,14 +62,14 @@ class Conv2dWA(nn.Module):
         x = self.activation(x)
         if self.extras is not None:
             x = self.extras(x)
-        x = self.wa(x)
+        #x = self.wm(x)
         return x
 
 
 class Extractor(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.adjust = Conv2dWA(
+        self.adjust = Conv2dWM(
             input_shape=(64, 192),
             planes_in=1,
             planes_out=128,
@@ -85,7 +82,7 @@ class Extractor(nn.Module):
 
         # had to use 128 instead of 64 to prevent division by 0
         seq = [
-            Conv2dWA(input_shape=(int(64 / 4**(i + 1)), int(64 / 4**(i + 1))),
+            Conv2dWM(input_shape=(int(64 / 4**(i + 1)), int(64 / 4**(i + 1))),
                      planes_in=128 * 2**i,
                      planes_out=128 * 2**(i + 1),
                      kernel_size=3,
@@ -95,7 +92,7 @@ class Extractor(nn.Module):
                      residual=True,
                      extras=[nn.AvgPool2d(2, 2)]) for i in range(3)
         ]
-        seq[-1].wa = nn.Identity()
+        #seq[-1].wm = nn.Identity()
         self.funnel = nn.Sequential(*seq)
         #self.avgpool = nn.AdaptiveAvgPool2d(1)
 

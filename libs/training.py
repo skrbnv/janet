@@ -1,5 +1,4 @@
 from tqdm import tqdm
-import torch
 
 
 def training_loop(dataloader, model, optimizer, criterion):

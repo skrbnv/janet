@@ -1,148 +1,149 @@
-from torch import load as torch_load, device as torch_device
-from torch.optim import SGD
-from torch.cuda import is_available as cuda_is_available
-from torch.utils.data import DataLoader
-from numpy import mean as np_mean
+import torch
+#import numpy as np
+#import gc
 import libs.functions as _fn
 from libs.data import Dataset
-import libs.models as models
 import libs.losses as _losses
-import libs.triplets as _tpl
-#import libs.classifier as _cls
-import libs.validation as _val
-from importlib import import_module
+from libs.scheduler import StepDownScheduler
+#import libs.validation as _val
+import libs.classifier as _cls
+import libs.models as models
 import wandb
 import os
 import torchinfo
 import sys
 import argparse
+from torch.utils.data import DataLoader
 
 # ------------------------- MAIN -------------------------
 _fn.report("**************************************************")
-_fn.report("**               Training script                **")
+_fn.report("**             Pre-training script              **")
+_fn.report("**  Pretraining model using cross entropy loss  **")
+_fn.report("**           instead of triplet loss.           **")
 _fn.report("**************************************************")
 _fn.todolist()
-
+_fn.fix_seed(1)
 # ------------------------- INIT -------------------------
 parser = argparse.ArgumentParser()
 parser.add_argument('--wandb',
                     action='store_true',
-                    default=False,
+                    default=True,
                     help='sync with W&B')
 parser.add_argument('--resume',
                     action='store_true',
-                    default=False,
+                    default=True,
                     help='resume run')
+parser.add_argument('--freeze',
+                    action='store_true',
+                    default=False,
+                    help='freeze extractor layers')
 parser.add_argument(
     '--config',
     action='store',
-    default='configs.janet001',
+    default='vox2',
     help='config filename (including path) imported as module, \
         defaults to configs.default')
 args = parser.parse_args()
-RESUME, WANDB, cfg_path = args.resume, args.wandb, args.config
+RESUME, WANDB, FREEZE, cfg = args.resume, args.wandb, args.freeze, args.config
 
-_fn.report(f'Importing configuration from \'{cfg_path}\'')
-CFG = import_module(cfg_path)
-RUN_ID = CFG.RUN_ID
+CONFIG = _fn.load_yaml(cfg)
 
-# Generating unqiue hash for the training run
-if not RESUME:
-    RUN_ID = _fn.get_random_hash()
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = str(CFG.GPU_ID)
+os.environ["CUDA_VISIBLE_DEVICES"] = str(CONFIG['general']['gpu_id']['value'])
 
-checkpoint = torch_load(CFG.CHECKPOINTFILENAME)
-
-# Fixing seed for reproducibility
-_fn.fix_seed(1)
+if RESUME:
+    checkpoint = torch.load(CONFIG['general']['checkpoint']['value'])
 
 if WANDB:
     if RESUME:
-        print(
-            f'Your run id is {RUN_ID} with checkpoint {CFG.CHECKPOINTFILENAME}'
-        )
+        checkpoint_file = CONFIG['general']['checkpoint']['value']
+        RUN_ID = os.path.basename(checkpoint_file).rstrip('.dict')[:-3]
+        print(f'Your run id is {RUN_ID} with checkpoint {checkpoint_file}')
         input("Press any key if you want to continue >>")
         wprj = wandb.init(id=RUN_ID,
-                          project=CFG.WANDBPROJECTNAME,
-                          resume="must")
+                          project=CONFIG['wandb']['project']['value'],
+                          resume="must",
+                          config=CONFIG)
     else:
-        wprj = wandb.init(project=CFG.WANDBPROJECTNAME, resume=False)
+        wprj = wandb.init(project=CONFIG['wandb']['project']['value'],
+                          resume=False,
+                          config=CONFIG)
         RUN_ID = wprj.id
-
-if cuda_is_available():
-    device = torch_device("cuda:0")
 else:
-    device = torch_device("cpu")
+    RUN_ID = _fn.get_random_hash()
+
+if torch.cuda.is_available():
+    device = torch.device("cuda:0")
+else:
+    device = torch.device("cpu")
 _fn.report("Torch is using device:", device)
 
-Model = getattr(models, CFG.MODEL_NAME)
-model = Model(num_classes=CFG.NUM_CLASSES)
-
-model.load_state_dict(checkpoint['state_dict'])
-_fn.report("Model state dict loaded from checkpoint")
-
-# overload classifier to embeddings (128 by default)
-# and freeze all parameters for extractor block
-del model.classifier
-Classifier = getattr(models, CFG.TRIPLET_CLASSIFIER_NAME)
-model.classifier = Classifier()
-for param in model.extractor.parameters():
-    param.requires_grad = False
+Model = getattr(models, CONFIG['model']['name']['value'])
+model = Model(num_classes=CONFIG['general']['classes']['value'])
 
 model.float()
-if cuda_is_available():
+if torch.cuda.is_available():
     model.cuda()
-_fn.report(
-    f'Model {CFG.MODEL_NAME} created, using \'{CFG.TRIPLET_CLASSIFIER_NAME}\' as classifier'
-)
+_fn.report(f"Model {CONFIG['model']['name']['value']} created")
 
-if CFG.TORCHINFO_SHAPE is not None:
-    torchinfo.summary(model, CFG.TORCHINFO_SHAPE)
+if RESUME:
+    model.load_state_dict(checkpoint['state_dict'])
+    _fn.report("Model state dict loaded from checkpoint")
+if FREEZE:
+    if not RESUME:
+        raise Exception('Process started anew, cannot freeze new layers')
+    if model.extractor:
+        for param in model.extractor.parameters():
+            param.requires_grad = False
+        _fn.report('Model Extractor block parameters are frozen')
+    else:
+        raise Exception('No \'extractor\' block in model')
 
-optimizer = SGD(model.parameters(), lr=1e-3, momentum=0.9)
-#optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-_fn.report("Optimizer initialized")
+print(model)
+torchinfo.summary(model, tuple(CONFIG['general']['torchinfo_shape']['value']))
 
-#if RESUME:
-#    optimizer.load_state_dict(checkpoint['optimizer'])
-#    _fn.report("Optimizer state dict loaded from checkpoint")
-
-D = Dataset(filename=CFG.DATASET_TRAIN,
-            cache_paths=CFG.CACHE_TRAIN,
-            force_even=True)
-D_eval = D.get_randomized_subset_with_augmentation(
-    max_records=50,
-    speakers_filter=D.get_unique_speakers(),
-    augmentations_filter=[])
-V = Dataset(filename=CFG.DATASET_VALIDATE, cache_paths=CFG.CACHE_VALIDATE)
-
-valid_loader = DataLoader(V, batch_size=32, shuffle=True)
-train_eval_loader = DataLoader(D_eval, batch_size=32, shuffle=True)
-_fn.report("Full train and validation datasets loaded")
-
-#ambient = NoiseLibrary(
-#    CFG.AMBIENT_NOISE_FILE) if 'noise' in CFG.AUGMENTATIONS else None
-#if ambient is not None:
-#    _fn.report('Ambient noises library loaded')
-
-########################################################
-####          Setting up basic variables          ####
-########################################################
+# Setting up initial epoch
 initial_epoch = 0
 if RESUME:
     initial_epoch = int(checkpoint['epoch']) + 1
     _fn.report("Initial epoch set to", initial_epoch)
-    # finally release memory under checkpoint
-    del checkpoint
-criterion = _losses.CustomTripletMarginLoss(CFG.MARGIN)
 
-# Pre-generate triplet sets based on Spectogram class
-# We have
-# - Iterator over Speakers [.............]
-# --- Generate set of anhchors by iterating over Samples * Spectograms
-# --- Generate positives: spectograms belong to same speaker except anchor
-# --- Generate negatives: all spectograms that don't belong to same Speaker
+# Setting up criterion
+criterion = torch.nn.CrossEntropyLoss()
+
+# Setting up optimizer and scheduler
+#optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+optimizer = torch.optim.SGD(
+    model.parameters(),
+    lr=CONFIG['optimizer']['initial_lr']['value'],
+    momentum=CONFIG['optimizer']['momentum']['value'],
+    weight_decay=CONFIG['optimizer']['weight_decay']['value'],
+    nesterov=CONFIG['optimizer']['nesterov']['value'])
+#if RESUME:
+#    optimizer.load_state_dict(checkpoint['optimizer'])
+#    _fn.report("Optimizer state dict loaded from checkpoint")
+_fn.report("Optimizer initialized")
+
+scheduler = StepDownScheduler(optimizer,
+                              initial_epoch=initial_epoch,
+                              config=CONFIG['sheduler'])
+#_fn.report("Scheduler initialized")
+
+# Setting up datasets and data loaders
+D = Dataset(filename=CONFIG['dataset']['train']['file']['value'],
+            cache_paths=CONFIG['dataset']['train']['dirs']['value'],
+            force_even=True)
+DT = D.get_randomized_subset_with_augmentation(
+    max_records=50,
+    speakers_filter=D.get_unique_speakers(),
+    augmentations_filter=[])
+V = Dataset(filename=CONFIG['dataset']['valid']['file']['value'],
+            cache_paths=CONFIG['dataset']['valid']['dirs']['value'])
+
+train_loader = DataLoader(D, batch_size=32, shuffle=True, num_workers=0)
+valid_loader = DataLoader(V, batch_size=32, shuffle=False, num_workers=0)
+train_eval_loader = DataLoader(DT, batch_size=32, shuffle=True, num_workers=0)
+_fn.report("Datasets loaded")
 
 ########################################################
 ####                  NN cycle                      ####
@@ -150,65 +151,22 @@ criterion = _losses.CustomTripletMarginLoss(CFG.MARGIN)
 if WANDB:
     wandb.watch(model)
 
-top1 = 0
-#top1 = checkpoint['top1'] if RESUME and 'top1' in checkpoint.keys() else 0
-
+top1 = checkpoint['top1'] if RESUME and 'top1' in checkpoint.keys() else 0
 lss = _losses.Losses()
-for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
-    _fn.report("**************** Epoch", epoch, "out of", CFG.EPOCHS_TOTAL,
-               "****************")
-
-    # gc.collect()
-    triplets_generated_per_epoch = 0
+for epoch in range(initial_epoch, CONFIG['general']['epochs']['value']):
+    _fn.report("**************** Epoch", epoch, "out of",
+               CONFIG['general']['epochs']['value'], "****************")
+    lss = _losses.Losses()
     _fn.report("-------------- Training ----------------")
-    _fn.report(f'Generating subsets with {CFG.SUBSET_SPEAKERS} speakers')
-    for batch_speakers in D.speakers_iterator(CFG.SUBSET_SPEAKERS, True):
-        Dsub = D.get_randomized_subset(
-            speakers_filter=batch_speakers,
-            max_records=CFG.SUBSET_SPECTROGRAMS_PER_SPEAKER)
 
-        Dsub.augment(augmentations=CFG.AUGMENTATIONS, extras={})
-        '''
-        losses = _cls.train(train_loader,
-                            model,
-                            optimizer,
-                            criterion,
-                            augmentations=CFG.AUGMENTATIONS,
-                            num_classes=CFG.NUM_CLASSES,
-                            extras={'ambient': ambient})
-        lss.append(losses, epoch)
-        _fn.report(f'Epoch loss: {lss.mean(epoch):.4f}')
-        '''
-
-        _fn.report("Updating embeddings")
-        Dsub.update_embeddings(model)
-
-        _fn.report("Generating triplets")
-        Dsub.reset()
-        anchors, positives, negatives = _tpl.generate_triplets_mp(
-            Dsub, CFG.TRIPLETSPERCLASS, CFG.POSITIVECRITERION,
-            CFG.NEGATIVESEMIHARD, CFG.NEGATIVEHARD)
-
-        _fn.report(f'Triplets generated: {len(anchors)}')
-        triplets_generated_per_epoch += len(anchors)
-
-        _fn.report("Training cycle")
-        model_params = {
-            'batch_size': CFG.BATCH_SIZE,
-            'shuffle': True,
-            'num_workers': 0
-        }
-        losses = _tpl.train_triplet_model(Dsub,
-                                          model=model,
-                                          params=model_params,
-                                          optimizer=optimizer,
-                                          anchors=anchors,
-                                          positives=positives,
-                                          negatives=negatives,
-                                          epoch=epoch,
-                                          criterion=criterion)
-        _fn.report(f'Loss: {np_mean(losses):.4f}')
-        lss.append(losses, epoch)
+    losses = _cls.train(train_loader,
+                        model,
+                        optimizer,
+                        criterion,
+                        augmentations=CONFIG['augmentations']['value'],
+                        num_classes=CONFIG['general']['classes']['value'],
+                        extras={})
+    lss.append(losses, epoch)
     _fn.report(f'Epoch loss: {lss.mean(epoch):.4f}')
     """
     _fn.report("-------------- Visualization ----------------")
@@ -216,28 +174,23 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
         dataset = _db.visualize(D, epoch, samples=30)
     """
 
-    top1train, top5train, top1val, top5val = _val.validate(model, D_eval, V)
+    top1train, top5train, top1val, top5val, val_loss = _cls.validate(
+        train_eval_loader, valid_loader, model, criterion)
 
-    #centroids = D.calculate_centroids()
-    #dmin, davg, dmax = _fn.centroid_distances(centroids)
-    #_fn.report(
-    #    f'Pairwise centroid distances, min:{dmin}, avg:{davg}, max:{dmax}')
+    print(
+        f"T1T: {top1train}, T5T: {top5train}, T1V: {top1val}, T5V: {top5val}")
 
     current_lr = optimizer.param_groups[0]['lr']
 
     if WANDB:
         wandb.log({
             "Loss": lss.mean(epoch),
-            "Validation loss": 0,
+            "Validation loss": val_loss,
             "Top1 acc over training data": top1train,
             "Top5 acc over training data": top5train,
             "Top1 acc over validation data": top1val,
             "Top5 acc over validation data": top5val,
-            #"Min pairwise distance": dmin,
-            #"Avg pairwise distance": davg,
-            #"Max pairwise distance": dmax,
-            "Learning rate": current_lr,
-            "Triplets generated": triplets_generated_per_epoch,
+            "Learning rate": current_lr
         })
 
     ##########################################################
@@ -252,6 +205,7 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
                            'optimizer': optimizer.state_dict(),
                            'top1': top1
                        })
-    if _fn.early_stop(lss.mean_per_epoch(), criterion='min'):
-        print("Early stop triggered")
-        sys.exit(0)
+    #if _fn.early_stop(lss.mean_per_epoch(), criterion='min'):
+    #    print("Early stop triggered")
+    #    sys.exit(0)
+    #scheduler.step()

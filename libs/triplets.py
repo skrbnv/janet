@@ -1,12 +1,9 @@
 import numpy as np
 import torch
-#import libs.data as _db
-import libs.functions as _fn
-from libs.datasets import TripletDataset, CentroidDataset
+from libs.datasets import TripletDataset
 import multiprocessing as mp
 from libs.multiprocessing import set_affinity_on_worker
-from time import sleep
-from copy import copy, deepcopy
+from copy import deepcopy
 
 
 def sub_generate_triplet_pair(D,

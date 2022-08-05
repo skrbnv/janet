@@ -18,3 +18,5 @@ wandb/
 cache/
 records/
 tmp/
+old/
+models/
