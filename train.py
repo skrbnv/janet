@@ -27,11 +27,11 @@ _fn.fix_seed(1)
 parser = argparse.ArgumentParser()
 parser.add_argument('--wandb',
                     action='store_true',
-                    default=True,
+                    default=False,
                     help='sync with W&B')
 parser.add_argument('--resume',
                     action='store_true',
-                    default=True,
+                    default=False,
                     help='resume run')
 parser.add_argument('--freeze',
                     action='store_true',
@@ -126,7 +126,7 @@ _fn.report("Optimizer initialized")
 
 scheduler = StepDownScheduler(optimizer,
                               initial_epoch=initial_epoch,
-                              config=CONFIG['sheduler'])
+                              config=CONFIG['scheduler'])
 #_fn.report("Scheduler initialized")
 
 # Setting up datasets and data loaders
@@ -140,9 +140,19 @@ DT = D.get_randomized_subset_with_augmentation(
 V = Dataset(filename=CONFIG['dataset']['valid']['file']['value'],
             cache_paths=CONFIG['dataset']['valid']['dirs']['value'])
 
-train_loader = DataLoader(D, batch_size=32, shuffle=True, num_workers=0)
-valid_loader = DataLoader(V, batch_size=32, shuffle=False, num_workers=0)
-train_eval_loader = DataLoader(DT, batch_size=32, shuffle=True, num_workers=0)
+train_loader = DataLoader(D,
+                          batch_size=CONFIG['general']['batch_size']['value'],
+                          shuffle=True,
+                          num_workers=0)
+valid_loader = DataLoader(V,
+                          batch_size=CONFIG['general']['batch_size']['value'],
+                          shuffle=False,
+                          num_workers=0)
+train_eval_loader = DataLoader(
+    DT,
+    batch_size=CONFIG['general']['batch_size']['value'],
+    shuffle=False,
+    num_workers=0)
 _fn.report("Datasets loaded")
 
 ########################################################

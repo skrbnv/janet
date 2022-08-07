@@ -128,19 +128,6 @@ class CentroidLoss(Module):
                     c + 1) * preds[row]
                 self.centroids[key] = new_value
                 self.counters[key] = c + 1
-        '''
-        for pred, label in zip(preds, labels):
-            key = label[1].item()
-            if key not in self.centroids.keys():
-                
-                self.counters[key] = 1
-            else:
-                c = self.counters[key]
-                new_value = c / (c + 1) * self.centroids[key] + 1 / (c +
-                                                                     1) * pred
-                self.centroids[key] = new_value
-                self.counters[key] = c + 1
-        '''
 
     def dist_positive(self, pred, label):
         indices = torch.where(label > 0)[0].tolist()
@@ -178,73 +165,3 @@ class CentroidLoss(Module):
         if reset is True:
             self.reset()
         return torch.mean(torch.stack(pos)) + torch.mean(torch.stack(neg))
-
-
-# Working one-hot centroid loss
-'''
-class CentroidLoss(Module):
-    def __init__(self, num_classes, margin_pos=.3, margin_neg=.3):
-        super().__init__()
-        self.current_epoch = -1
-        self.num_classes = num_classes
-        self.margin_pos = margin_pos
-        self.margin_neg = margin_neg
-        self.Cosine = CosineSimilarity()
-        self.centroids = {}
-        self.counters = {}
-        self.reset()
-
-    def reset(self):
-        self.centroids = {}
-
-    def append(self, preds, labels):
-        for pred, label in zip(preds, labels):
-            key = label[1].item()
-            if key not in self.centroids.keys():
-                self.centroids[key] = pred
-                self.counters[key] = 1
-            else:
-                c = self.counters[key]
-                new_value = c / (c + 1) * self.centroids[key] + 1 / (c +
-                                                                     1) * pred
-                self.centroids[key] = new_value
-                self.counters[key] = c + 1
-
-    def dist_positive(self, pred, label):
-        key = label[1].item()
-        return 1 - self.Cosine(pred.unsqueeze(0),
-                               self.centroids[key].unsqueeze(0))
-
-    def dist_negative(self, pred, label):
-        key = label[1].item()
-        output = torch.zeros(1).to(pred.device)
-        addums = 0
-        for ckey in self.centroids.keys():
-            if not key == ckey:
-                addums += 1
-                dist = 1 - self.Cosine(pred.unsqueeze(0),
-                                       self.centroids[ckey].unsqueeze(0))
-                loss = torch.max(self.margin_neg - dist, torch.zeros(1).to(pred.device))
-                output += loss
-        return output / addums
-
-    def forward(self, preds, labels, epoch: int = -1) -> torch.Tensor:
-        if epoch > -1 and not epoch == self.current_epoch:
-            self.current_epoch = epoch
-            self.reset()
-
-        indices = torch.nonzero(labels)
-        self.append(preds, indices)
-
-        pos, neg = [], []
-        for pred, label in zip(preds, indices):
-            pos.append(self.dist_positive(pred, label))
-            neg.append(self.dist_negative(pred, label))
-
-        #dAPs = 1 - self.Cosine(anchor, positive)
-        #dANs = 1 - self.Cosine(anchor, negative)
-        #losses = relu(dAPs - dANs + currentMargin)
-        if epoch == -1:
-            self.centroids, self.counters = {}, {}
-        return torch.mean(torch.stack(pos)) + torch.mean(torch.stack(neg))
-'''

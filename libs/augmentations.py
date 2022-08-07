@@ -5,7 +5,7 @@ import random
 
 
 def erase(inputs, classes):
-    erase_fn = RandomErasing()
+    erase_fn = RandomErasing(probability=1)
     return erase_fn(inputs), classes
 
 
@@ -14,15 +14,14 @@ def mixup_cutmix(inputs,
                  num_classes,
                  prob=1,
                  mixup_alpha=[.2, 1.],
-                 cutmix_alpha=[.2, 1.],
-                 label_smoothing=0):
+                 cutmix_alpha=[.2, 1.]):
     mixup_alpha_choice = random.uniform(mixup_alpha[0], mixup_alpha[1])
     mixup_cutmix_choice = random.uniform(cutmix_alpha[0], cutmix_alpha[1])
     mixup_args = {
         'mixup_alpha': mixup_alpha_choice,
         'cutmix_alpha': mixup_cutmix_choice,
         'cutmix_minmax': None,
-        'prob': .5,
+        'prob': 1.,
         'switch_prob': 0.5,
         'mode': 'batch',
         'label_smoothing': 0,

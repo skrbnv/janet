@@ -11,6 +11,9 @@ general:
   epochs:
     desc: Max epochs
     value: 2000
+  batch_size:
+    desc: Batch size
+    value: 32
   torchinfo_shape:
     desc: Torchinfo shape
     value: [64,1,64,192]
@@ -18,16 +21,16 @@ general:
 optimizer:
   initial_lr:
     desc: Initial lr
-    value: 0.01
+    value: 0.001
   momentum:
     desc: Momentum
     value: 0.9
   weight_decay:
     desc: Weight decay
-    value: 0.0005
+    value: 0
   nesterov:
     desc: Use Nesterov?
-    value: True
+    value: False
 
 scheduler:
   multiplier:

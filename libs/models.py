@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 
-class WeightedAttention(nn.Module):
+class WeightedMultiplication(nn.Module):
     def __init__(self, planes, h, w, residual=False) -> None:
         super().__init__()
         self.weights = nn.Parameter(torch.Tensor(planes, h, h))
@@ -53,8 +53,8 @@ class Conv2dWM(nn.Module):
         self.bn = nn.BatchNorm2d(planes_out)
         self.activation = nn.GELU()
         self.extras = nn.Sequential(*extras) if extras is not None else None
-        self.wm = WeightedAttention(planes_out, input_shape[0], input_shape[1],
-                                    residual)
+        self.wm = WeightedMultiplication(planes_out, input_shape[0],
+                                         input_shape[1], residual)
 
     def forward(self, x):
         x = self.conv(x)
@@ -62,7 +62,7 @@ class Conv2dWM(nn.Module):
         x = self.activation(x)
         if self.extras is not None:
             x = self.extras(x)
-        #x = self.wm(x)
+        x = self.wm(x)
         return x
 
 
@@ -92,28 +92,22 @@ class Extractor(nn.Module):
                      residual=True,
                      extras=[nn.AvgPool2d(2, 2)]) for i in range(3)
         ]
-        #seq[-1].wm = nn.Identity()
+        seq[-1].wm = nn.Identity()
         self.funnel = nn.Sequential(*seq)
-        #self.avgpool = nn.AdaptiveAvgPool2d(1)
 
     def forward(self, x):
         x = self.adjust(x)
         x = self.funnel(x)
-        #x = self.avgpool(x)
         return x.flatten(1)
 
 
 class Classifier(nn.Module):
     def __init__(self, size_in, size_out) -> None:
         super().__init__()
-        self.linear1 = nn.Linear(size_in, size_out)
-        # self.dropout = nn.Dropout(dropout)
-        # self.linear2 = nn.Linear(midsize, size_out)
+        self.linear = nn.Linear(size_in, size_out)
 
     def forward(self, x):
-        x = self.linear1(x)
-        # x = self.dropout(x)
-        # x = self.linear2(x)
+        x = self.linear(x)
         return x
 
 
@@ -122,10 +116,10 @@ class ClassifierEmbeddings(nn.Module):
         super().__init__()
         self.size_in = size_in
         self.size_out = size_out
-        self.linear1 = nn.Linear(self.size_in, self.size_out)
+        self.linear = nn.Linear(self.size_in, self.size_out)
 
     def forward(self, x):
-        x = self.linear1(x)
+        x = self.linear(x)
         return x
 
 
@@ -148,7 +142,6 @@ class Janet(nn.Module):
         super().__init__()
         self.extractor = Extractor()
         self.classifier = Classifier(size_in=midsize, size_out=num_classes)
-        #self.classifier = ClassifierWithDropout(1024, 2048, .5, 5994)
 
     def forward(self, x):
         x = self.extractor(x)
