@@ -7,8 +7,8 @@ class WeightedMultiplication(nn.Module):
         super().__init__()
         self.weights = nn.Parameter(torch.Tensor(planes, h, h))
         nn.init.kaiming_normal_(self.weights)
-        self.bn = nn.BatchNorm2d(planes)
-        self.activation = nn.GELU()
+        #elf.bn = nn.BatchNorm2d(planes)
+        #self.activation = nn.GELU()
         self.residual = residual
         if self.residual:
             self.weight_identity = nn.Parameter(torch.Tensor([.5]))
@@ -18,15 +18,15 @@ class WeightedMultiplication(nn.Module):
             identity = x.clone()
         bs = x.shape[0]
         x = torch.bmm(x.flatten(0, 1), x.flatten(0, 1).transpose(1, 2))
-        x = torch.bmm(
-            x,
-            self.weights.broadcast_to((bs, *self.weights.shape)).flatten(0, 1))
+        x = torch.triu(x)
+        x = x * self.weights.broadcast_to(
+            (bs, *self.weights.shape)).flatten(0, 1)
         x = x.view((bs, -1, *x.shape[1:]))
         if self.residual:
             x = (1 -
                  self.weight_identity) * x + self.weight_identity * identity
-        x = self.bn(x)
-        x = self.activation(x)
+        #x = self.bn(x)
+        #x = self.activation(x)
         return x
 
 

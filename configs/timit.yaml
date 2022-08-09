@@ -1,7 +1,7 @@
 general:
   checkpoint:
     desc: Checkpoint filename
-    value: ./checkpoints/3qkdoxyv021.dict
+    value: ./checkpoints/3ts6jqsa021.dict
   classes:
     desc: Number of classes
     value: 630
@@ -10,7 +10,7 @@ general:
     value: 0
   epochs:
     desc: Max epochs
-    value: 2000
+    value: 200
   batch_size:
     desc: Batch size
     value: 32
@@ -38,7 +38,7 @@ scheduler:
     value: 0.1
   triggers:
     desc: Epochs when to step
-    value: [20,50,100]
+    value: [300,400,500]
 
 wandb:
   project: 

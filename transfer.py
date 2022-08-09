@@ -79,19 +79,22 @@ else:
 _fn.report("Torch is using device:", device)
 
 Model = getattr(models, CONFIG['model']['name']['value'])
-model = Model(num_classes=CONFIG['general']['classes']['value'])
+model = Model(num_classes=630)
 
 model.float()
 if torch.cuda.is_available():
     model.cuda()
 _fn.report(f"Model {CONFIG['model']['name']['value']} created")
 
+pretrained = torch.load(CONFIG['general']['pretrained']['value'])
+model.load_state_dict(pretrained['state_dict'])
+Classifier = getattr(models, CONFIG['model']['override_classifier']['value'])
+model.classifier = Classifier(1024, 5994)
+
 if RESUME:
     model.load_state_dict(checkpoint['state_dict'])
     _fn.report("Model state dict loaded from checkpoint")
 if FREEZE:
-    if not RESUME:
-        raise Exception('Process started anew, cannot freeze new layers')
     if model.extractor:
         for param in model.extractor.parameters():
             param.requires_grad = False

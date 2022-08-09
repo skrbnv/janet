@@ -1,4 +1,7 @@
 general:
+  pretrained:
+    desc: Path to pretrained model
+    value: ./checkpoints/n8hpx2ki038.dict
   checkpoint:
     desc: Checkpoint filename
     value: ./checkpoints/1lhkfdg8006.dict
@@ -38,7 +41,7 @@ scheduler:
     value: 0.1
   triggers:
     desc: Epochs when to step
-    value: [20,50,100]
+    value: [1000,2000,10000]
 
 
 wandb:
@@ -50,8 +53,8 @@ model:
   name:
     desc: Model name
     value: Janet
-  triplet_classifier:
-    desc: Classifier class name
+  override_classifier:
+    desc: Classifier name
     value: ClassifierEmbeddings
 
 dataset:
