@@ -10,6 +10,7 @@ import itertools
 import gc
 from torch.utils.data import Dataset as UtilsDataset
 import shutil
+import tqdm
 
 
 def cache_write(id, arr, cache=None):
@@ -40,10 +41,52 @@ def cache_write(id, arr, cache=None):
     return True
 
 
+class FileStorageIndex():
+    def __init__(self, paths) -> None:
+        self.paths = paths
+        self.storages = None
+        self.data = {}
+        self.rescan()
+
+    def rescan(self):
+        self.storages = []
+        for path in self.paths:
+            self.storages.extend(
+                [f.path for f in os.scandir(path) if f.is_dir()])
+        for storage in tqdm.tqdm(self.storages,
+                                 desc="Rebuilding cache indices"):
+            for f in os.listdir(storage):
+                if not os.path.isdir(os.path.join(storage, f)):
+                    self.data[f] = os.path.join(storage, f)
+
+    def where(self, key):
+        if key in self.data.keys():
+            return self.data[key]
+        else:
+            return None
+
+    def filter(self, keys):
+        dks = []
+        for key in self.data.keys():
+            if key not in keys:
+                dks.append(key)
+            else:
+                keys.remove(key)
+        for dk in dks:
+            del self.data[key]
+
+    def __len__(self):
+        return len(self.data)
+
+    def empty(self):
+        self.data = {}
+
+
 class Dataset(UtilsDataset):
     def __init__(self,
                  cache_paths,
                  data=None,
+                 useindex=False,
                  filename=None,
                  force_even=False):
         if data is not None and filename is not None:
@@ -57,7 +100,8 @@ class Dataset(UtilsDataset):
         self.dm = None
         self.data = {}
         self.speakers = None
-
+        self.index = FileStorageIndex(
+            cache_paths) if useindex is True else None
         if data is not None:
             self.data = data
             if force_even:
@@ -99,8 +143,8 @@ class Dataset(UtilsDataset):
             return False
 
     def load(self, filename):
-        with open(filename, 'rb') as handle:
-            self.data = pickle.load(handle)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            with open(filename, 'rb') as handle:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                self.data = pickle.load(handle)
         return True
 
     def save(self, filename):
@@ -163,7 +207,11 @@ class Dataset(UtilsDataset):
                     return storage
 
     def cache_read(self, id):
-        with open(os.path.join(self.get_location(id), id), 'rb') as f:
+        if self.index is not None:
+            location = self.index.where(id)
+        else:
+            location = os.path.join(self.get_location(id), id)
+        with open(location, 'rb') as f:
             try:
                 arr = np.load(f)
             except Exception as e:
@@ -448,12 +496,15 @@ class Dataset(UtilsDataset):
     def get_randomized_subset_with_augmentation(self,
                                                 max_records,
                                                 speakers_filter,
-                                                augmentations_filter=[]):
+                                                augmentations_filter=[],
+                                                useindex=False):
         # adding sorted just in case order follows initial order during creation,
         # when same speaker records were added sequentially
+        repaug = f' with augmentations: {augmentations_filter}' if len(
+            augmentations_filter) > 0 else ''
         _fn.report(
-            f'Generating randomized subset with {len(speakers_filter)} speakers, up to {max_records} records each, with following augmentations: {augmentations_filter}'
-        )
+            f'Generating randomized subset with {len(speakers_filter)} speakers, up to {max_records} records each'
+            + repaug)
         current_speaker = None
         records = []
         output = {}
@@ -480,13 +531,19 @@ class Dataset(UtilsDataset):
                 # got to the record with next speaker
                 records = [{'key': key, 'value': value}]
                 current_speaker = value['speaker']
-        return Dataset(data=output, cache_paths=self.cache_paths)
+        return Dataset(data=output,
+                       cache_paths=self.cache_paths,
+                       useindex=useindex)
 
-    def get_randomized_subset(self, max_records, speakers_filter):
+    def get_randomized_subset(self,
+                              max_records,
+                              speakers_filter,
+                              useindex=False):
         return self.get_randomized_subset_with_augmentation(
             speakers_filter=speakers_filter,
             augmentations_filter=[],
-            max_records=max_records)
+            max_records=max_records,
+            useindex=useindex)
 
     def augment(self, augmentations=[], extras={}):
         # ignore label smoothing (!?)

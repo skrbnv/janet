@@ -1,7 +1,10 @@
 general:
+  pretrained:
+    desc: Path to pretrained model
+    value: ./checkpoints/n8hpx2ki038.dict
   checkpoint:
     desc: Checkpoint filename
-    value: ./checkpoints/3ts6jqsa021.dict
+    value: ./checkpoints/3kbp9k6a014.dict
   classes:
     desc: Number of classes
     value: 630
@@ -48,10 +51,10 @@ wandb:
 model:
   name:
     desc: Model name
-    value: Janet
-  triplet_classifier:
-    desc: Classifier class name
-    value: ClassifierEmbeddings
+    value: Janet_v2e
+  override_classifier:
+    desc: Classifier name
+    value: Classifier
 
 dataset:
   train:
@@ -62,14 +65,17 @@ dataset:
       desc: Dataset dirs, train
       value: 
         - /mnt/nvme2tb/datasets/TIMIT2/simple/cache/train
-  valid:
+  test:
     file:
-      desc: Dataset index, validate
-      value: /mnt/nvme2tb/datasets/TIMIT2/simple/datasets/validate.dt
+      desc: Dataset index, test
+      value: /mnt/nvme2tb/datasets/TIMIT2/simple/datasets/test.dt
     dirs:
-      desc: Dataset dirs, validate
+      desc: Dataset dirs, test
       value: 
-        - /mnt/nvme2tb/datasets/TIMIT2/simple/cache/validate
+        - /mnt/nvme2tb/datasets/TIMIT2/simple/cache/test
+  useindex:
+    desc: Use file indexing to speed up localization of the spectrograms 
+    value: False
 
 augmentations:
   desc: Augmentations
@@ -78,6 +84,9 @@ augmentations:
     - mix
     - erase
     - label_smoothing
+  train_mode:
+    desc: Single or double training pass (augm and non-augm data)
+    value: 1
 
 visualization:
   dir:

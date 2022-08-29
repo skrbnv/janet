@@ -67,51 +67,51 @@ def sequential_probability(candidates, centroids, truth):
         return (False, False)
 
 
-def validate(model, D, V):
-    _fn.report("-------------- Validation ----------------")
+def test(model, D, T):
+    _fn.report("-------------- Testing ----------------")
     # retrieve non-augmented records for dataset
     _fn.report("Updating embeddings")
     # Test on smaller subsets (64 speakers), but every 10 epoch test on full set
 
     D.update_embeddings(model)
-    V.update_embeddings(model)
+    T.update_embeddings(model)
 
     _fn.report("Calculating centroids")
     centroids = D.calculate_centroids()
     # get N random training records and compare with centroids
 
     D.reset()
-    valCandidates = D.get_random_records(limit_per_speaker=10, flag=False)
+    testCandidates = D.get_random_records(limit_per_speaker=10, flag=False)
     top1train = np.round(
         100 *
-        top1(candidates=[np.squeeze(el['embedding']) for el in valCandidates],
+        top1(candidates=[np.squeeze(el['embedding']) for el in testCandidates],
              centroids=centroids,
-             truths=[el['speaker'] for el in valCandidates]),
+             truths=[el['speaker'] for el in testCandidates]),
         decimals=2)
     top5train = np.round(
         100 *
-        top5(candidates=[np.squeeze(el['embedding']) for el in valCandidates],
+        top5(candidates=[np.squeeze(el['embedding']) for el in testCandidates],
              centroids=centroids,
-             truths=[el['speaker'] for el in valCandidates]),
+             truths=[el['speaker'] for el in testCandidates]),
         decimals=2)
 
     _fn.report(f'Top 1 training accuracy dist(sample, centroids): {top1train}')
     _fn.report(f'Top 5 training accuracy dist(sample, centroids): {top5train}')
 
-    V.reset()
-    valCandidates = V.get_random_records(limit_per_speaker=10, flag=False)
-    top1val = np.round(
+    T.reset()
+    testCandidates = T.get_random_records(limit_per_speaker=10, flag=False)
+    top1test = np.round(
         100 *
-        top1(candidates=[np.squeeze(el['embedding']) for el in valCandidates],
+        top1(candidates=[np.squeeze(el['embedding']) for el in testCandidates],
              centroids=centroids,
-             truths=[el['speaker'] for el in valCandidates]),
+             truths=[el['speaker'] for el in testCandidates]),
         decimals=2)
-    top5val = np.round(
+    top5test = np.round(
         100 *
-        top5(candidates=[np.squeeze(el['embedding']) for el in valCandidates],
+        top5(candidates=[np.squeeze(el['embedding']) for el in testCandidates],
              centroids=centroids,
-             truths=[el['speaker'] for el in valCandidates]),
+             truths=[el['speaker'] for el in testCandidates]),
         decimals=2)
-    _fn.report(f'Top 1 validation accuracy dist(sample, centroids): {top1val}')
-    _fn.report(f'Top 5 validation accuracy dist(sample, centroids): {top5val}')
-    return top1train, top5train, top1val, top5val
+    _fn.report(f'Top 1 test accuracy dist(sample, centroids): {top1test}')
+    _fn.report(f'Top 5 test accuracy dist(sample, centroids): {top5test}')
+    return top1train, top5train, top1test, top5test

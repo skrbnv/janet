@@ -7,7 +7,7 @@ import pprint
 
 #checkpointfilename = '/home/sergey/code/cleanup/checkpoints/1jupj2ou001.dict'
 checkpointfilename = '/home/sergey/code/cleanup/checkpoints/3dvwk62l051.dict'
-test_dir = '/mnt/nvme2tb/datasets/TIMIT2/sorted/validate'
+test_dir = '/mnt/nvme2tb/datasets/TIMIT2/sorted/test'
 config = {
     'SLICE_MS': 1920,
     'STEP_MS': 100,
@@ -25,8 +25,8 @@ TRIPLET_CLASSIFIER_NAME = 'ClassifierEmbeddings'
 NUM_CLASSES = 630
 
 _fn.report("**************************************************")
-_fn.report("**         Sequential validation script         **")
-_fn.report("**     Validating sequences of spectrograms     **")
+_fn.report("**            Sequential test script            **")
+_fn.report("**       Tesing sequences of spectrograms       **")
 _fn.report("**             for each audio sample.           **")
 _fn.report("**************************************************")
 

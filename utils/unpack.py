@@ -6,8 +6,7 @@ import pickle
 
 SOURCE_DIR = '/media/sergey/3Tb1/cache'
 TARGET_DIR = '/mnt/nvme2tb/datasets/voxceleb2/double/cache'
-D = Dataset(
-    filename='/mnt/nvme2tb/datasets/voxceleb2/double/datasets/validate.dt')
+D = Dataset(filename='/mnt/nvme2tb/datasets/voxceleb2/double/datasets/test.dt')
 
 sources = os.listdir(SOURCE_DIR)
 

@@ -4,7 +4,7 @@ general:
     value: ./checkpoints/n8hpx2ki038.dict
   checkpoint:
     desc: Checkpoint filename
-    value: ./checkpoints/1lhkfdg8006.dict
+    value: ./checkpoints/toezr9nh002.dict
   classes:
     desc: Number of classes
     value: 5994
@@ -16,7 +16,7 @@ general:
     value: 2000
   batch_size:
     desc: Batch size
-    value: 32
+    value: 64
   torchinfo_shape:
     desc: Torchinfo shape
     value: [64,1,64,192]
@@ -52,30 +52,34 @@ wandb:
 model:
   name:
     desc: Model name
-    value: Janet
+    value: WideResNet2810
   override_classifier:
     desc: Classifier name
-    value: ClassifierEmbeddings
+    value: Classifier
+
 
 dataset:
   train:
     file:
       desc: Dataset index, train
-      value: /mnt/nvme2tb/datasets/voxceleb2/fastrun/filtered-hpf/train.dt
+      value: /mnt/nvme2tb/datasets/voxceleb2/final/train.dt
     dirs:
       desc: Dataset dirs, train
       value: 
-        - /mnt/nvme2tb/datasets/voxceleb2/fastrun/filtered-hpf/cache/train
-        - /mnt/nvme1tb/datasets/voxceleb2/fastrun/filtered-hpf/cache/train
-  valid:
+        - /mnt/nvme2tb/datasets/voxceleb2/final/cache/train
+        - /mnt/nvme1tb/datasets/voxceleb2/final/cache/train
+  test:
     file:
-      desc: Dataset index, validate
-      value: /mnt/nvme2tb/datasets/voxceleb2/fastrun/filtered-hpf/validate.dt
+      desc: Dataset index, test
+      value: /mnt/nvme2tb/datasets/voxceleb2/final/test.dt
     dirs:
-      desc: Dataset dirs, validate
+      desc: Dataset dirs, test
       value: 
-        - /mnt/nvme2tb/datasets/voxceleb2/fastrun/filtered-hpf/cache/validate
-        - /mnt/nvme1tb/datasets/voxceleb2/fastrun/filtered-hpf/cache/validate
+        - /mnt/nvme2tb/datasets/voxceleb2/final/cache/test
+        - /mnt/nvme1tb/datasets/voxceleb2/final/cache/test
+  useindex:
+    desc: Use file indexing to speed up localization of the spectrograms 
+    value: True
 
 augmentations:
   desc: Augmentations
@@ -84,6 +88,9 @@ augmentations:
     - mix
     - erase
     - label_smoothing
+  train_mode:
+    desc: Single or double training pass (augm and non-augm data)
+    value: 1
 
 visualization:
   dir:

@@ -19,17 +19,17 @@ RESUME = args.resume
 
 # SETTINGS
 '''
-MEDIA_DIR = "/mnt/nvme2tb/datasets/TIMIT2/sorted/validate"
-DATASET_TARGET = "/mnt/nvme2tb/datasets/TIMIT2/seq/datasets/validate.dt"
-PRIMARY_CACHE = "/mnt/nvme2tb/datasets/TIMIT2/seq/cache/validate"
+MEDIA_DIR = "/mnt/nvme2tb/datasets/TIMIT2/sorted/test"
+DATASET_TARGET = "/mnt/nvme2tb/datasets/TIMIT2/seq/datasets/test.dt"
+PRIMARY_CACHE = "/mnt/nvme2tb/datasets/TIMIT2/seq/cache/test"
 AUXILLARY_CACHE = None
 RECORDS_DUMP = None
 MERGE_CACHES = False
 '''
-MEDIA_DIR = "/mnt/nvme2tb/datasets/voxceleb2/sorted/validate"
-DATASET_TARGET = "/mnt/nvme2tb/datasets/voxceleb2/tiny/validate.dt"
-PRIMARY_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/tiny/cache/validate"
-AUXILLARY_CACHE = "/mnt/nvme1tb/datasets/voxceleb2/tiny/cache/validate"
+MEDIA_DIR = "/mnt/nvme2tb/datasets/voxceleb2/sorted/test"
+DATASET_TARGET = "/mnt/nvme2tb/datasets/voxceleb2/tiny/test.dt"
+PRIMARY_CACHE = "/mnt/nvme2tb/datasets/voxceleb2/tiny/cache/test"
+AUXILLARY_CACHE = "/mnt/nvme1tb/datasets/voxceleb2/tiny/cache/test"
 RECORDS_DUMP = './records/tmp'
 MERGE_CACHES = False
 
@@ -63,7 +63,7 @@ MAX_SPEAKERS = 5994
 MAX_SAMPLES_PER_SPEAKER = 10
 MAX_SPECTROGRAMS_PER_SAMPLE = 2
 PICK_RANDOM_SPECTROGRAMS = True
-VALIDATE_RESULTS = False
+TEST_RESULTS = False
 
 _fn.report(" ************************************************** ")
 _fn.report(" **            Spectrograms generation           ** ")
@@ -152,8 +152,7 @@ if limit > 0:
                     raise Exception(
                         f'Workers raised following exceptions {[result._value for result in results if not result.successful()]}'
                     )
-            if VALIDATE_RESULTS:
-                # validating data
+            if TEST_RESULTS:
                 num_generated = len(_fn.filelist(RECORDS_DUMP))
                 if not num_generated == min(i + step, limit):
                     raise Exception(

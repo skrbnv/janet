@@ -9,7 +9,7 @@ import libs.models as models
 import libs.losses as _losses
 import libs.triplets as _tpl
 #import libs.classifier as _cls
-import libs.validation as _val
+import libs.test as _test
 from importlib import import_module
 import wandb
 import os
@@ -115,11 +115,11 @@ D_eval = D.get_randomized_subset_with_augmentation(
     max_records=50,
     speakers_filter=D.get_unique_speakers(),
     augmentations_filter=[])
-V = Dataset(filename=CFG.DATASET_VALIDATE, cache_paths=CFG.CACHE_VALIDATE)
+T = Dataset(filename=CFG.DATASET_TEST, cache_paths=CFG.CACHE_TEST)
 
-valid_loader = DataLoader(V, batch_size=32, shuffle=True)
+test_loader = DataLoader(T, batch_size=32, shuffle=True)
 train_eval_loader = DataLoader(D_eval, batch_size=32, shuffle=True)
-_fn.report("Full train and validation datasets loaded")
+_fn.report("Full train and test datasets loaded")
 
 #ambient = NoiseLibrary(
 #    CFG.AMBIENT_NOISE_FILE) if 'noise' in CFG.AUGMENTATIONS else None
@@ -216,7 +216,7 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
         dataset = _db.visualize(D, epoch, samples=30)
     """
 
-    top1train, top5train, top1val, top5val = _val.validate(model, D_eval, V)
+    top1train, top5train, top1test, top5test = _test.test(model, D_eval, T)
 
     #centroids = D.calculate_centroids()
     #dmin, davg, dmax = _fn.centroid_distances(centroids)
@@ -228,11 +228,11 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
     if WANDB:
         wandb.log({
             "Loss": lss.mean(epoch),
-            "Validation loss": 0,
+            "Test loss": 0,
             "Top1 acc over training data": top1train,
             "Top5 acc over training data": top5train,
-            "Top1 acc over validation data": top1val,
-            "Top5 acc over validation data": top5val,
+            "Top1 acc over test data": top1test,
+            "Top5 acc over test data": top5test,
             #"Min pairwise distance": dmin,
             #"Avg pairwise distance": davg,
             #"Max pairwise distance": dmax,
@@ -241,10 +241,10 @@ for epoch in range(initial_epoch, CFG.EPOCHS_TOTAL):
         })
 
     ##########################################################
-    ##### Saving checkpoint if validation accuracy improved
+    ##### Saving checkpoint if test accuracy improved
     ##########################################################
-    if top1val > top1:
-        top1 = top1val
+    if top1test > top1:
+        top1 = top1test
         _fn.checkpoint(id=RUN_ID,
                        data={
                            'epoch': epoch,

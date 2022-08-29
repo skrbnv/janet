@@ -3,44 +3,48 @@ import torch
 from tqdm import tqdm
 import libs.functions as _fn
 import libs.augmentations as _aug
+import random
 
 
-def train_loop(loader,
+def train_loop(train_loader,
                model,
                optimizer,
                criterion,
-               augmentations,
-               clipping,
                num_classes,
-               extras={}):
+               augmentations=None,
+               extras={},
+               lsm=False,
+               gclip=False,
+               config={
+                   'mixprob': 1.,
+                   'eraseprob': 1.,
+               }):
     device = next(model.parameters()).device
     losses = []
-    for inputs, labels, specs in tqdm(loader):
+    for inputs, labels, _ in (progressbar := tqdm(train_loader)):
         optimizer.zero_grad()
-
         bi, bl = inputs.to(device), labels.to(device)
-
-        if augmentations['echo'] is True:
-            bi, bl = _aug.echo(bi, bl, prob=.1)
-
-        if augmentations['noise'] is True:
-            bi, bl = _aug.noise(bi, bl, lib=extras['ambient'], prob=.5)
-
-        if augmentations['augm'] == 'mix':
+        augm = random.choice(augmentations) if len(augmentations) > 0 else ''
+        if augm == 'echo':
+            bi, bl = _aug.echo(bi, bl, prob=1)
+        elif augm == 'noise':
+            bi, bl = _aug.noise(bi, bl, lib=extras['ambient'], prob=1)
+        elif augm == 'mix':
             bi, bl = _aug.mixup_cutmix(bi,
                                        torch.nonzero(bl, as_tuple=True)[1],
-                                       num_classes)
-        if augmentations['label_smoothing'] is True:
+                                       num_classes, config['mixprob'])
+        elif augm == 'erase':
+            bi, bl = _aug.erase(bi, bl, config['eraseprob'])
+        if lsm is True:
             bl = _aug.smooth_one_hot(bl, smoothing=.1)
-
-        elif augmentations['augm'] == 'erase':
-            bi, bl = _aug.erase(bi, bl)
 
         y_pred = model(bi)
         loss = criterion(y_pred, bl)
         losses.append(loss.item())
         loss.backward()
-        if clipping:
+        ins = '/'.join(augmentations) if len(augmentations) > 0 else '  '
+        progressbar.set_description(f'[{ins}] {loss.item():.4f}')
+        if gclip is True:
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=2)
         optimizer.step()
     return losses
@@ -52,47 +56,96 @@ def train(train_loader,
           criterion,
           num_classes,
           augmentations=None,
-          extras={}):
-    augms = [] if augmentations is None else augmentations.copy()
-    augms.append('[unmodified]')
-    if 'gradclip' in augms:
-        grad_clip = True
-        augms.remove('gradclip')
-    else:
-        grad_clip = False
-    if 'noise' in augms:
-        noise = True
-        augms.remove('noise')
-    else:
-        noise = False
-    if 'echo' in augms:
-        echo = True
-        augms.remove('echo')
-    else:
-        echo = False
+          extras={},
+          mode=2):
+
+    augms = augmentations[:]
     if 'label_smoothing' in augms:
-        label_smoothing = True
+        lsm = True
         augms.remove('label_smoothing')
     else:
-        label_smoothing = False
+        lsm = False
+    if 'grad_clip' in augms:
+        gclip = True
+        augms.remove('grad_clip')
+    else:
+        gclip = False
 
-    _fn.report(
-        f'Running training loop using augmentations: {"none" if len(augms)==1 else ", ".join(augms)} {" +echo" if echo is True else ""}{" +noise" if noise is True else ""}{" +gradient clipping" if grad_clip else ""}{" +label smoothing" if label_smoothing else ""}'
-    )
     losses = []
-    for augm in augms:
+    if len(augms) > 0:
+        config = {
+            'mixprob': 1,
+            'eraseprob': 1,
+        } if mode == 2 else {
+            'mixprob': 0.5,
+            'eraseprob': 0.5,
+        }
         losses.extend(
-            train_loop(
-                train_loader, model, optimizer, criterion, {
-                    'augm': augm,
-                    'noise': noise,
-                    'echo': echo,
-                    'label_smoothing': label_smoothing
-                }, grad_clip, num_classes, extras))
+            train_loop(train_loader=train_loader,
+                       model=model,
+                       optimizer=optimizer,
+                       criterion=criterion,
+                       num_classes=num_classes,
+                       augmentations=augms,
+                       extras=extras,
+                       lsm=lsm,
+                       gclip=gclip,
+                       config=config))
+    if mode == 2:
+        losses.extend(
+            train_loop(train_loader=train_loader,
+                       model=model,
+                       optimizer=optimizer,
+                       criterion=criterion,
+                       num_classes=num_classes,
+                       augmentations=[],
+                       extras=extras,
+                       lsm=lsm,
+                       gclip=gclip))
+
     return losses
 
 
-def validation_loop(loader, model, criterion=None):
+def fasttrain(train_loader,
+              model,
+              optimizer,
+              criterion,
+              num_classes,
+              augmentations=None,
+              extras={}):
+
+    augms = augmentations[:]
+    if 'label_smoothing' in augms:
+        lsm = True
+        augms.remove('label_smoothing')
+    else:
+        lsm = False
+    if 'grad_clip' in augms:
+        gclip = True
+        augms.remove('grad_clip')
+    else:
+        gclip = False
+
+    losses = []
+    if len(augms) > 0:
+        losses.extend(
+            train_loop(train_loader=train_loader,
+                       model=model,
+                       optimizer=optimizer,
+                       criterion=criterion,
+                       num_classes=num_classes,
+                       augmentations=augms,
+                       extras=extras,
+                       lsm=lsm,
+                       gclip=gclip,
+                       config={
+                           'mixprob': 0.5,
+                           'eraseprob': 0.5,
+                       }))
+    return losses
+
+
+def test_loop(loader, model, criterion=None):
     device = next(model.parameters()).device
     total, correct_t1, correct_t5 = 0, 0, 0
     model.eval()
@@ -106,7 +159,7 @@ def validation_loop(loader, model, criterion=None):
         # three options: indices, one-hot or soft probabilities (including n-hot)
         if len(labels[0]) == 1:
             #indices
-            raise Exception("Validation for indexed labels is unfinished")
+            raise Exception("Not implemented")
             indices_t1 = torch.argmax(y_pred, dim=1)
             indices_t5 = torch.topk(y_pred, 5)
             correct_t1 += torch.sum(indices_t1 == labels.to(device))
@@ -120,23 +173,22 @@ def validation_loop(loader, model, criterion=None):
                 indices_true.unsqueeze(1), indices_t5.shape))
             correct_t1 += torch.sum(indices_t1 == indices_true)
         else:
-            raise Exception(
-                'Soft probabilities not implemented for validation')
+            raise Exception('Soft probabilities not implemented')
         total += len(y_pred)
     model.train()
     return total, correct_t1, correct_t5, np.mean(
         losses) if len(losses) > 0 else None
 
 
-def validate(train_loader, valid_loader, model, criterion):
-    _fn.report("-------------- Validation ----------------")
+def test(train_loader, test_loader, model, criterion):
+    _fn.report("-------------- Testing ----------------")
     # retrieve non-augmented records for dataset
 
-    total, t1, t5, _ = validation_loop(train_loader, model)
+    total, t1, t5, _ = test_loop(train_loader, model)
     top1train = np.round(100 * (t1 / total).cpu().numpy(), decimals=2)
     top5train = np.round(100 * (t5 / total).cpu().numpy(), decimals=2)
 
-    total, t1, t5, loss = validation_loop(valid_loader, model, criterion)
-    top1val = np.round(100 * (t1 / total).cpu().numpy(), decimals=2)
-    top5val = np.round(100 * (t5 / total).cpu().numpy(), decimals=2)
-    return top1train, top5train, top1val, top5val, loss
+    total, t1, t5, loss = test_loop(test_loader, model, criterion)
+    top1test = np.round(100 * (t1 / total).cpu().numpy(), decimals=2)
+    top5test = np.round(100 * (t5 / total).cpu().numpy(), decimals=2)
+    return top1train, top5train, top1test, top5test, loss

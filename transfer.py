@@ -5,7 +5,6 @@ import libs.functions as _fn
 from libs.data import Dataset
 import libs.losses as _losses
 from libs.scheduler import StepDownScheduler
-#import libs.validation as _val
 import libs.classifier as _cls
 import libs.models as models
 import wandb
@@ -137,20 +136,20 @@ D = Dataset(filename=CONFIG['dataset']['train']['file']['value'],
             cache_paths=CONFIG['dataset']['train']['dirs']['value'],
             force_even=True)
 DT = D.get_randomized_subset_with_augmentation(
-    max_records=50,
+    max_records=20,
     speakers_filter=D.get_unique_speakers(),
     augmentations_filter=[])
-V = Dataset(filename=CONFIG['dataset']['valid']['file']['value'],
-            cache_paths=CONFIG['dataset']['valid']['dirs']['value'])
+T = Dataset(filename=CONFIG['dataset']['test']['file']['value'],
+            cache_paths=CONFIG['dataset']['test']['dirs']['value'])
 
-train_loader = DataLoader(D,
+train_loader = DataLoader(DT,
                           batch_size=CONFIG['general']['batch_size']['value'],
                           shuffle=True,
                           num_workers=0)
-valid_loader = DataLoader(V,
-                          batch_size=CONFIG['general']['batch_size']['value'],
-                          shuffle=False,
-                          num_workers=0)
+test_loader = DataLoader(T,
+                         batch_size=CONFIG['general']['batch_size']['value'],
+                         shuffle=False,
+                         num_workers=0)
 train_eval_loader = DataLoader(
     DT,
     batch_size=CONFIG['general']['batch_size']['value'],
@@ -187,30 +186,31 @@ for epoch in range(initial_epoch, CONFIG['general']['epochs']['value']):
         dataset = _db.visualize(D, epoch, samples=30)
     """
 
-    top1train, top5train, top1val, top5val, val_loss = _cls.validate(
-        train_eval_loader, valid_loader, model, criterion)
+    top1train, top5train, top1test, top5test, test_loss = _cls.test(
+        train_eval_loader, test_loader, model, criterion)
 
     print(
-        f"T1T: {top1train}, T5T: {top5train}, T1V: {top1val}, T5V: {top5val}")
+        f"T1Tr: {top1train}, T5Tr: {top5train}, T1Ts: {top1test}, T5Ts: {top5test}"
+    )
 
     current_lr = optimizer.param_groups[0]['lr']
 
     if WANDB:
         wandb.log({
             "Loss": lss.mean(epoch),
-            "Validation loss": val_loss,
+            "Test loss": test_loss,
             "Top1 acc over training data": top1train,
             "Top5 acc over training data": top5train,
-            "Top1 acc over validation data": top1val,
-            "Top5 acc over validation data": top5val,
+            "Top1 acc over test data": top1test,
+            "Top5 acc over test data": top5test,
             "Learning rate": current_lr
         })
 
     ##########################################################
-    ##### Saving checkpoint if validation accuracy improved
+    ##### Saving checkpoint if testing accuracy improved
     ##########################################################
-    if top1val > top1:
-        top1 = top1val
+    if top1test > top1:
+        top1 = top1test
         _fn.checkpoint(id=RUN_ID,
                        data={
                            'epoch': epoch,

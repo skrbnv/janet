@@ -4,8 +4,8 @@ from timm.data.random_erasing import RandomErasing
 import random
 
 
-def erase(inputs, classes):
-    erase_fn = RandomErasing(probability=1)
+def erase(inputs, classes, prob=1):
+    erase_fn = RandomErasing(probability=prob)
     return erase_fn(inputs), classes
 
 
@@ -21,7 +21,7 @@ def mixup_cutmix(inputs,
         'mixup_alpha': mixup_alpha_choice,
         'cutmix_alpha': mixup_cutmix_choice,
         'cutmix_minmax': None,
-        'prob': 1.,
+        'prob': 1,
         'switch_prob': 0.5,
         'mode': 'batch',
         'label_smoothing': 0,

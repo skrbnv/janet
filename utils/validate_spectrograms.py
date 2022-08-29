@@ -1,7 +1,7 @@
 from libs.data import Dataset, cache_validate
 import tqdm
 
-DATASET = '/mnt/nvme2tb/datasets/voxceleb2/double/datasets/validate.dt'
+DATASET = '/mnt/nvme2tb/datasets/voxceleb2/double/datasets/test.dt'
 CACHE = "/mnt/nvme2tb/datasets/voxceleb2/double/cache-validate"
 
 D = Dataset(filename=DATASET, cache_path=CACHE)

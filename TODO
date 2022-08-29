@@ -1,1 +1,1 @@
-- Don't forget to check for shape, mean and variance adjustments of dataset
+- Don't forget to normalize dataset
