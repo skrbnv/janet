@@ -51,7 +51,7 @@ wandb:
 model:
   name:
     desc: Model name
-    value: Janet_v2e
+    value: Janet
   override_classifier:
     desc: Classifier name
     value: Classifier
@@ -60,19 +60,19 @@ dataset:
   train:
     file:
       desc: Dataset index, train
-      value: /mnt/nvme2tb/datasets/TIMIT2/simple/datasets/train.dt
+      value: /Volumes/EXT4/datasets/TIMIT2/final/train.dt
     dirs:
       desc: Dataset dirs, train
       value: 
-        - /mnt/nvme2tb/datasets/TIMIT2/simple/cache/train
+        - /Volumes/EXT4/datasets/TIMIT2/final/cache/train
   test:
     file:
       desc: Dataset index, test
-      value: /mnt/nvme2tb/datasets/TIMIT2/simple/datasets/test.dt
+      value: /Volumes/EXT4/datasets/TIMIT2/final/test.dt
     dirs:
       desc: Dataset dirs, test
       value: 
-        - /mnt/nvme2tb/datasets/TIMIT2/simple/cache/test
+        - /Volumes/EXT4/datasets/TIMIT2/final/cache/test
   useindex:
     desc: Use file indexing to speed up localization of the spectrograms 
     value: False
