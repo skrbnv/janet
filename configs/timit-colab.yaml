@@ -64,15 +64,15 @@ dataset:
     dirs:
       desc: Dataset dirs, train
       value: 
-        -/content/gdrive/MyDrive/colab/datasets/TIMIT/final/cache/train
+        - /content/gdrive/MyDrive/colab/datasets/TIMIT/final/cache/train
   test:
     file:
       desc: Dataset index, test
-      value:/content/gdrive/MyDrive/colab/datasets/TIMIT/final/test.dt
+      value: /content/gdrive/MyDrive/colab/datasets/TIMIT/final/test.dt
     dirs:
       desc: Dataset dirs, test
       value: 
-        -/content/gdrive/MyDrive/colab/datasets/TIMIT/final/cache/test
+        - /content/gdrive/MyDrive/colab/datasets/TIMIT/final/cache/test
   useindex:
     desc: Use file indexing to speed up localization of the spectrograms 
     value: False
