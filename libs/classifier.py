@@ -56,10 +56,9 @@ def train(train_loader,
           criterion,
           num_classes,
           augmentations=None,
-          extras={},
-          mode=2):
+          extras={}):
 
-    augms = augmentations[:]
+    augms = augmentations[:] if augmentations is not None else []
     if 'label_smoothing' in augms:
         lsm = True
         augms.remove('label_smoothing')
@@ -72,36 +71,16 @@ def train(train_loader,
         gclip = False
 
     losses = []
-    if len(augms) > 0:
-        config = {
-            'mixprob': 1,
-            'eraseprob': 1,
-        } if mode == 2 else {
-            'mixprob': 0.5,
-            'eraseprob': 0.5,
-        }
-        losses.extend(
-            train_loop(train_loader=train_loader,
-                       model=model,
-                       optimizer=optimizer,
-                       criterion=criterion,
-                       num_classes=num_classes,
-                       augmentations=augms,
-                       extras=extras,
-                       lsm=lsm,
-                       gclip=gclip,
-                       config=config))
-    if mode == 2:
-        losses.extend(
-            train_loop(train_loader=train_loader,
-                       model=model,
-                       optimizer=optimizer,
-                       criterion=criterion,
-                       num_classes=num_classes,
-                       augmentations=[],
-                       extras=extras,
-                       lsm=lsm,
-                       gclip=gclip))
+    losses.extend(
+        train_loop(train_loader=train_loader,
+                   model=model,
+                   optimizer=optimizer,
+                   criterion=criterion,
+                   num_classes=num_classes,
+                   augmentations=augms,
+                   extras=extras,
+                   lsm=lsm,
+                   gclip=gclip))
 
     return losses
 

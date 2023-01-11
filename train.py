@@ -140,15 +140,18 @@ if __name__ == '__main__':
     D = Dataset(filename=CONFIG['dataset']['train']['file']['value'],
                 cache_paths=CONFIG['dataset']['train']['dirs']['value'],
                 force_even=True,
-                useindex=CONFIG['dataset']['useindex']['value'])
+                useindex=CONFIG['dataset']['useindex']['value'],
+                caching=True)
     DT = D.get_randomized_subset_with_augmentation(
         max_records=20,
         speakers_filter=D.get_unique_speakers(),
         augmentations_filter=[],
-        useindex=CONFIG['dataset']['useindex']['value'])
+        useindex=CONFIG['dataset']['useindex']['value'],
+        caching=True)
     T = Dataset(filename=CONFIG['dataset']['test']['file']['value'],
                 cache_paths=CONFIG['dataset']['test']['dirs']['value'],
-                useindex=CONFIG['dataset']['useindex']['value'])
+                useindex=CONFIG['dataset']['useindex']['value'],
+                caching=True)
 
     train_loader = DataLoader(
         D,
@@ -189,8 +192,7 @@ if __name__ == '__main__':
                 criterion,
                 augmentations=CONFIG['augmentations']['value'],
                 num_classes=CONFIG['general']['classes']['value'],
-                extras={},
-                mode=CONFIG['augmentations']['train_mode']['value'])
+                extras={})
             lss.append(losses, epoch)
             _fn.report(f'Epoch loss: {lss.mean(epoch):.4f}')
         """

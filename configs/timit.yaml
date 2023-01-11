@@ -81,12 +81,9 @@ augmentations:
   desc: Augmentations
   # mix, erase, noise, gradclip, label_smoothing
   value:
-    - mix
-    - erase
-    - label_smoothing
-  train_mode:
-    desc: Single or double training pass (augm and non-augm data)
-    value: 1
+    #- mix
+    #- erase
+    #- label_smoothing
 
 visualization:
   dir:

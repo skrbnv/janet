@@ -45,7 +45,7 @@ class FileStorageIndex():
     def __init__(self, paths) -> None:
         self.paths = paths
         self.storages = None
-        self.data = {}
+        self.index = {}
         self.rescan()
 
     def rescan(self):
@@ -57,29 +57,29 @@ class FileStorageIndex():
                                  desc="Rebuilding cache indices"):
             for f in os.listdir(storage):
                 if not os.path.isdir(os.path.join(storage, f)):
-                    self.data[f] = os.path.join(storage, f)
+                    self.index[f] = os.path.join(storage, f)
 
     def where(self, key):
-        if key in self.data.keys():
-            return self.data[key]
+        if key in self.index.keys():
+            return self.index[key]
         else:
             return None
 
     def filter(self, keys):
         dks = []
-        for key in self.data.keys():
+        for key in self.index.keys():
             if key not in keys:
                 dks.append(key)
             else:
                 keys.remove(key)
         for dk in dks:
-            del self.data[key]
+            del self.index[key]
 
     def __len__(self):
-        return len(self.data)
+        return len(self.index)
 
     def empty(self):
-        self.data = {}
+        self.index = {}
 
 
 class Dataset(UtilsDataset):
@@ -88,6 +88,7 @@ class Dataset(UtilsDataset):
                  data=None,
                  useindex=False,
                  filename=None,
+                 caching=False,
                  force_even=False):
         if data is not None and filename is not None:
             raise Exception(
@@ -99,6 +100,8 @@ class Dataset(UtilsDataset):
         self.report = print
         self.dm = None
         self.data = {}
+        self.caching = caching
+        self.cache = {}
         self.speakers = None
         self.index = FileStorageIndex(
             cache_paths) if useindex is True else None
@@ -206,11 +209,10 @@ class Dataset(UtilsDataset):
                 if os.path.isfile(os.path.join(storage, id)):
                     return storage
 
-    def cache_read(self, id):
-        if self.index is not None:
-            location = self.index.where(id)
-        else:
-            location = os.path.join(self.get_location(id), id)
+    def subread(self, id):
+        location = self.index.where(
+            id) if self.index is not None else os.path.join(
+                self.get_location(id), id)
         with open(location, 'rb') as f:
             try:
                 arr = np.load(f)
@@ -218,7 +220,19 @@ class Dataset(UtilsDataset):
                 raise IOError(
                     f'Encountered exception when trying to read file {id}, exception message: {e}'
                 )
-        return arr  # np.squeeze(arr, axis=0)  # .T
+        return arr
+
+    def cache_read(self, id):
+        if self.caching is True:
+            if id in self.cache.keys():
+                return self.cache[id]
+            else:
+                arr = self.subread(id)
+                self.cache[id] = arr
+                return arr
+        else:
+            return self.subread(id)
+        # np.squeeze(arr, axis=0)  # .T
 
     def trimmed(self, batch_size, procs=2):
         '''
@@ -497,7 +511,8 @@ class Dataset(UtilsDataset):
                                                 max_records,
                                                 speakers_filter,
                                                 augmentations_filter=[],
-                                                useindex=False):
+                                                useindex=False,
+                                                caching=False):
         # adding sorted just in case order follows initial order during creation,
         # when same speaker records were added sequentially
         repaug = f' with augmentations: {augmentations_filter}' if len(
@@ -533,7 +548,8 @@ class Dataset(UtilsDataset):
                 current_speaker = value['speaker']
         return Dataset(data=output,
                        cache_paths=self.cache_paths,
-                       useindex=useindex)
+                       useindex=useindex,
+                       caching=caching)
 
     def get_randomized_subset(self,
                               max_records,
