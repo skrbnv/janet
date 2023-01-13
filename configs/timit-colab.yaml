@@ -60,19 +60,19 @@ dataset:
   train:
     file:
       desc: Dataset index, train
-      value: /content/data/timit/final/final/train.dt
+      value: /home/ubuntu/simple/datasets/train.dt
     dirs:
       desc: Dataset dirs, train
       value: 
-        - /content/data/timit/final/final/cache/train
+        - /home/ubuntu/simple/cache/train
   test:
     file:
       desc: Dataset index, test
-      value: /content/data/timit/final/final/test.dt
+      value: /home/ubuntu/simple/datasets/test.dt
     dirs:
       desc: Dataset dirs, test
       value: 
-        - /content/data/timit/final/final/cache/test
+        - /home/ubuntu/simple/cache/test
   useindex:
     desc: Use file indexing to speed up localization of the spectrograms 
     value: False
