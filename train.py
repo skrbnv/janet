@@ -103,8 +103,8 @@ if __name__ == '__main__':
             raise Exception('No \'extractor\' block in model')
 
     print(model)
-    torchinfo.summary(model,
-                      tuple(CONFIG['general']['torchinfo_shape']['value']))
+    #torchinfo.summary(model,
+    #                  tuple(CONFIG['general']['torchinfo_shape']['value']))
 
     # Setting up initial epoch
     initial_epoch = 0

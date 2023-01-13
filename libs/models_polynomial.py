@@ -3,34 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class WeightedMultiplication(nn.Module):
-    def __init__(self, planes, h, w, residual=False) -> None:
-        super().__init__()
-        self.weights = nn.Parameter(torch.Tensor(planes, h, h))
-        nn.init.kaiming_normal_(self.weights)
-        self.bn = nn.BatchNorm2d(planes)
-        self.activation = nn.ReLU()
-        self.residual = residual
-        if self.residual:
-            self.weight_identity = nn.Parameter(torch.Tensor([.5]))
-
-    def forward(self, x):
-        if self.residual:
-            identity = x.clone()
-        bs = x.shape[0]
-        x = torch.bmm(x.flatten(0, 1), x.flatten(0, 1).transpose(1, 2))
-        x = torch.triu(x)
-        x = x * self.weights.broadcast_to(
-            (bs, *self.weights.shape)).flatten(0, 1)
-        x = x.view((bs, -1, *x.shape[1:]))
-        if self.residual:
-            x = (1 -
-                 self.weight_identity) * x + self.weight_identity * identity
-        x = self.bn(x)
-        x = self.activation(x)
-        return x
-
-
 class Poly2d(nn.Module):
     def __init__(
             self,
@@ -38,7 +10,9 @@ class Poly2d(nn.Module):
             planes_out,
             kernel_size=3,  # only single values allowed rn
             stride=1,
-            padding=1):
+            padding=1,
+            bias=True,
+            skip=False):
         super(Poly2d, self).__init__()
         assert kernel_size % 2 == 1, 'kernel size cannot be even'
         # create filters
@@ -52,20 +26,24 @@ class Poly2d(nn.Module):
         self.kernel_size = kernel_size
         self.stride = stride
         self.padding = padding
-        self.biases = nn.Parameter(torch.Tensor(planes_out, 1))
-        nn.init.kaiming_uniform_(self.biases)
+        if bias is True:
+            self.biases = nn.Parameter(torch.Tensor(planes_out, 1))
+            nn.init.kaiming_uniform_(self.biases)
+        else:
+            self.biases = None
+        self.skip = skip
 
     def forward(self, input):
-        # DEVICE!
-        # BIAS!
         # input shape (bs, n, h, w)
-        p = self.padding
+        p, s = self.padding, self.stride
         device = input.device
         output = torch.empty(
             (input.size(0), self.filters.size(0),
              int((input.size(2) + p * 2 - self.kernel_size + 1) / self.stride),
              int((input.size(3) + p * 2 - self.kernel_size + 1) /
                  self.stride))).to(device)
+        if self.skip is True:
+            return output
         data = F.pad(input, (p, p, p, p), mode="constant", value=0)
         for y in range(0 + p, data.size(-2) - p, self.stride):
             for x in range(0 + p, data.size(-1) - p, self.stride):
@@ -87,13 +65,15 @@ class Poly2d(nn.Module):
                 # multiply weights (filters) by matrix with auto-broadcasting matrix
                 # bmm = self.filters*mxs
                 for i in range(self.filters.size(0)):
-                    output[:, i, y - p,
-                           x - p] = torch.sum((self.filters[i] * slice),
-                                              dim=(1, 2, 3)) + self.biases[i]
+                    output[:, i, int((y - p) / s),
+                           int((x - p) / s)] = torch.sum(
+                               (self.filters[i] * slice), dim=(1, 2, 3))
+                    if self.biases is not None:
+                        output += self.biases[i]
         return output
 
 
-class Conv2dWM(nn.Module):
+class PolyConv2d(nn.Module):
     def __init__(self,
                  input_shape,
                  planes_in,
@@ -103,6 +83,7 @@ class Conv2dWM(nn.Module):
                  padding=0,
                  groups=1,
                  bias=True,
+                 skip=False,
                  residual=False,
                  extras=None) -> None:
         super().__init__()
@@ -110,7 +91,9 @@ class Conv2dWM(nn.Module):
                            planes_out,
                            kernel_size=kernel_size,
                            stride=stride,
-                           padding=padding)
+                           padding=padding,
+                           bias=bias,
+                           skip=skip)
         self.bn = nn.BatchNorm2d(planes_out)
         self.activation = nn.ReLU()
         self.extras = nn.Sequential(*extras) if extras is not None else None
@@ -130,7 +113,7 @@ class Conv2dWM(nn.Module):
 class Extractor(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.adjust = Conv2dWM(
+        self.adjust = PolyConv2d(
             input_shape=(64, 192),
             planes_in=3,
             planes_out=128,
@@ -139,18 +122,20 @@ class Extractor(nn.Module):
             padding=3,
             bias=False,
             residual=False,
+            skip=False,
             extras=[nn.AvgPool2d(3, stride=(1, 3), padding=1)])
 
         seq = [
-            Conv2dWM(input_shape=(int(64 / 4**(i + 1)), int(64 / 4**(i + 1))),
-                     planes_in=128 * 2**i,
-                     planes_out=128 * 2**(i + 1),
-                     kernel_size=3,
-                     stride=2,
-                     padding=1,
-                     bias=False,
-                     residual=True,
-                     extras=[nn.AvgPool2d(2, 2)]) for i in range(3)
+            PolyConv2d(input_shape=(int(64 / 4**(i + 1)),
+                                    int(64 / 4**(i + 1))),
+                       planes_in=128 * 2**i,
+                       planes_out=128 * 2**(i + 1),
+                       kernel_size=3,
+                       stride=2,
+                       padding=1,
+                       bias=False,
+                       residual=True,
+                       extras=[nn.AvgPool2d(2, 2)]) for i in range(3)
         ]
         seq[-1].wm = nn.Identity()
         self.funnel = nn.Sequential(*seq)
