@@ -162,7 +162,9 @@ def raw_audio_by_dir(folder=".", limit=0):
                     if data.ndim > 1:
                         data = data.mean(axis=1)
                     if sr != 16000:
-                        data = librosa.resample(data, sr, 16000)
+                        data = librosa.resample(data,
+                                                orig_sr=sr,
+                                                target_sr=16000)
                         #output.append(
                         #    [os.path.basename(root) + "-" + filename, data])
                         output.append([filename, data])

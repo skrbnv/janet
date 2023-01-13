@@ -5,10 +5,6 @@ import numpy as np
 from libs.data import cache_write
 import pickle
 import cv2
-from pedalboard import (
-    Pedalboard,
-    HighpassFilter
-)
 
 
 def set_affinity_on_worker():
@@ -60,21 +56,11 @@ def mp_worker(id, folder, length, config):
 def process_sample(sample, config):
     ''' Function responsible for processing single sample into set of spectrograms '''
     #audioEmpzd = _fn.preemphasize(sample[1])
-    board = Pedalboard(
-        [
-            #NoiseGate(-37, 10, 1, 100),
-            HighpassFilter(50),
-            HighpassFilter(60),
-            #Compressor(-25, 25)
-        ],
-        sample_rate=16000)
-
-    audio = board(sample[1])
     augmentations = [0]
     records = []
     for augmentation in augmentations:
         spectrograms, rms = _fn.generate_slices(
-            audio,
+            sample[1],
             length=config['SLICE_MS'] / 1000,
             sr=16000,
             step=config['STEP_MS'] / 1000,

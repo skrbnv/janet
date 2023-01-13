@@ -3,7 +3,7 @@ import libs.functions as _fn
 from libs.data import Dataset
 import libs.losses as _losses
 import libs.classifier as _cls
-import libs.models as models
+import libs.models_polynomial as models
 import wandb
 import os
 import torchinfo
@@ -86,8 +86,7 @@ if __name__ == '__main__':
     model = Model(num_classes=CONFIG['general']['classes']['value'])
 
     model.float()
-    if torch.cuda.is_available():
-        model.cuda()
+    model.to(device)
     _fn.report(f"Model {CONFIG['model']['name']['value']} created")
 
     if RESUME:

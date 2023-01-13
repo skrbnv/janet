@@ -60,19 +60,19 @@ dataset:
   train:
     file:
       desc: Dataset index, train
-      value: /Volumes/EXT4/datasets/TIMIT2/final/train.dt
+      value: /Users/sergey/work/from_linux/TIMIT-spgs/simple/datasets/train.dt
     dirs:
       desc: Dataset dirs, train
       value: 
-        - /Volumes/EXT4/datasets/TIMIT2/final/cache/train
+        - /Users/sergey/work/from_linux/TIMIT-spgs/simple/cache/train
   test:
     file:
       desc: Dataset index, test
-      value: /Volumes/EXT4/datasets/TIMIT2/final/test.dt
+      value: /Users/sergey/work/from_linux/TIMIT-spgs/simple/datasets/test.dt
     dirs:
       desc: Dataset dirs, test
       value: 
-        - /Volumes/EXT4/datasets/TIMIT2/final/cache/test
+        - /Users/sergey/work/from_linux/TIMIT-spgs/simple/cache/test
   useindex:
     desc: Use file indexing to speed up localization of the spectrograms 
     value: False
