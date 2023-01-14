@@ -16,10 +16,10 @@ general:
     value: 200
   batch_size:
     desc: Batch size
-    value: 32
+    value: 16
   torchinfo_shape:
     desc: Torchinfo shape
-    value: [64,1,64,192]
+    value: [32,1,64,192]
 
 optimizer:
   initial_lr:
@@ -60,19 +60,19 @@ dataset:
   train:
     file:
       desc: Dataset index, train
-      value: /Users/sergey/work/from_linux/TIMIT-spgs/simple/datasets/train.dt
+      value: /home/sergey/code/simple/datasets/train.dt
     dirs:
       desc: Dataset dirs, train
       value: 
-        - /Users/sergey/work/from_linux/TIMIT-spgs/simple/cache/train
+        - /home/sergey/code/simple/cache/train
   test:
     file:
       desc: Dataset index, test
-      value: /Users/sergey/work/from_linux/TIMIT-spgs/simple/datasets/test.dt
+      value: /home/sergey/code/simple/datasets/test.dt
     dirs:
       desc: Dataset dirs, test
       value: 
-        - /Users/sergey/work/from_linux/TIMIT-spgs/simple/cache/test
+        - /home/sergey/code/simple/cache/test
   useindex:
     desc: Use file indexing to speed up localization of the spectrograms 
     value: False
@@ -81,9 +81,9 @@ augmentations:
   desc: Augmentations
   # mix, erase, noise, gradclip, label_smoothing
   value:
-    #- mix
-    #- erase
-    #- label_smoothing
+    - mix
+    - erase
+    - label_smoothing
 
 visualization:
   dir:

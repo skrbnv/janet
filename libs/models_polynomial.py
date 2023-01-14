@@ -33,6 +33,9 @@ class Poly2d(nn.Module):
             self.biases = None
         self.skip = skip
 
+    def extra_repr(self):
+        return f'filters: {tuple(self.filters.shape)}, kernel: {self.kernel_size}, stride: {self.stride}, padding: {self.padding}, bias: {self.biases is not None}'
+
     def forward(self, input):
         # input shape (bs, n, h, w)
         p, s = self.padding, self.stride

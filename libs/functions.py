@@ -10,7 +10,7 @@ import random
 import math
 from string import ascii_lowercase
 from scipy.spatial.distance import cdist
-import libs.visualization as _viz
+#import libs.visualization as _viz
 import sys
 from glob import glob
 import re
