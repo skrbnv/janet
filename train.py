@@ -3,7 +3,7 @@ import libs.functions as _fn
 from libs.data import Dataset
 import libs.losses as _losses
 import libs.classifier as _cls
-import libs.models_polynomial as models
+import libs.models_polynomial_2 as models
 import wandb
 import os
 import torchinfo
@@ -103,8 +103,8 @@ if __name__ == '__main__':
             raise Exception('No \'extractor\' block in model')
 
     print(model)
-    #torchinfo.summary(model,
-    #                  tuple(CONFIG['general']['torchinfo_shape']['value']))
+    torchinfo.summary(model,
+                      tuple(CONFIG['general']['torchinfo_shape']['value']))
 
     # Setting up initial epoch
     initial_epoch = 0

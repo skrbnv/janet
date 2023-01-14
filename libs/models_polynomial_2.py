@@ -93,16 +93,13 @@ class Poly2d(nn.Module):
 
 class PolyConv2d(nn.Module):
     def __init__(self,
-                 input_shape,
                  planes_in,
                  planes_out,
                  kernel_size,
                  stride=1,
                  padding=0,
-                 groups=1,
                  bias=True,
                  skip=False,
-                 residual=False,
                  extras=None) -> None:
         super().__init__()
         self.poly = Poly2d(planes_in,
@@ -116,8 +113,6 @@ class PolyConv2d(nn.Module):
         self.activation = nn.Identity()  # nn.ReLU()
         self.extras = nn.Sequential(
             *extras) if extras is not None or len(extras) == 0 else None
-        #self.wm = WeightedMultiplication(planes_out, input_shape[0],
-        #                                 input_shape[1], residual)
 
     def forward(self, x):
         x = self.poly(x)
@@ -125,37 +120,30 @@ class PolyConv2d(nn.Module):
         x = self.activation(x)
         if self.extras is not None:
             x = self.extras(x)
-        #x = self.wm(x)
         return x
 
 
 class Extractor(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.adjust = PolyConv2d(input_shape=(64, 192),
-                                 planes_in=1,
-                                 planes_out=32,
+        self.adjust = PolyConv2d(planes_in=1,
+                                 planes_out=16,
                                  kernel_size=7,
                                  stride=(1, 3),
                                  padding=3,
                                  bias=False,
-                                 residual=False,
                                  skip=False,
-                                 extras=[])
+                                 extras=[nn.AvgPool2d((2, 2))])
 
         seq = [
-            PolyConv2d(input_shape=(int(64 / 4**(i + 1)),
-                                    int(64 / 4**(i + 1))),
-                       planes_in=32 * 2**i,
-                       planes_out=32 * 2**(i + 1),
+            PolyConv2d(planes_in=16 * 2**i,
+                       planes_out=16 * 2**(i + 1),
                        kernel_size=5,
-                       stride=4,
+                       stride=2,
                        padding=2,
                        bias=False,
-                       residual=True,
-                       extras=[]) for i in range(2)
+                       extras=[nn.AvgPool2d((2, 2))]) for i in range(2)
         ]
-        seq[-1].wm = nn.Identity()
         self.funnel = nn.Sequential(*seq)
 
     def forward(self, x):
@@ -175,7 +163,7 @@ class Classifier(nn.Module):
 
 
 class Janet(nn.Module):
-    def __init__(self, midsize=2048, num_classes=5994) -> None:
+    def __init__(self, midsize=256, num_classes=5994) -> None:
         super().__init__()
         self.extractor = Extractor()
         self.classifier = Classifier(size_in=midsize, size_out=num_classes)

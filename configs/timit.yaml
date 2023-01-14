@@ -16,7 +16,7 @@ general:
     value: 200
   batch_size:
     desc: Batch size
-    value: 16
+    value: 32
   torchinfo_shape:
     desc: Torchinfo shape
     value: [32,1,64,192]
