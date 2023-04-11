@@ -20,16 +20,16 @@ if __name__ == '__main__':
 
     # SETTINGS
     '''
-    MEDIA_DIR = "/Volumes/EXT4/datasets/TIMIT2/sorted/test"
-    DATASET_TARGET = "/Volumes/EXT4/datasets/TIMIT2/simple/datasets/test.dt"
-    PRIMARY_CACHE = "/Volumes/EXT4/datasets/TIMIT2/simple/cache/test"
+    MEDIA_DIR = "/media/sergey/EXT4/datasets/TIMIT2/raw/sorted/test"
+    DATASET_TARGET = "/media/sergey/EXT4/datasets/TIMIT2/simple/datasets/test.dt"
+    PRIMARY_CACHE = "/media/sergey/EXT4/datasets/TIMIT2/simple/cache/test"
     AUXILLARY_CACHE = None
     RECORDS_DUMP = None
     MERGE_CACHES = False
     '''
-    MEDIA_DIR = "/Volumes/EXT4/datasets/TIMIT2/sorted/train"
-    DATASET_TARGET = "/Users/sergey/work/from_linux/TIMIT-spgs/simple/datasets/train.dt"
-    PRIMARY_CACHE = "/Users/sergey/work/from_linux/TIMIT-spgs/simple/cache/train"
+    MEDIA_DIR = "/media/sergey/EXT4/datasets/TIMIT2/raw/sorted/validate"
+    DATASET_TARGET = "/media/sergey/EXT4/datasets/TIMIT2/generated/simple/datasets/validate.dt"
+    PRIMARY_CACHE = "/media/sergey/EXT4/datasets/TIMIT2/generated/simple/cache/validate"
     AUXILLARY_CACHE = None  # "/mnt/nvme1tb/datasets/voxceleb2/tiny/cache/test"
     RECORDS_DUMP = './records/tmp'
     MERGE_CACHES = False
@@ -61,8 +61,8 @@ if __name__ == '__main__':
 
     #SPECTROGRAMS#
     MAX_SPEAKERS = 5994
-    MAX_SAMPLES_PER_SPEAKER = 100
-    MAX_SPECTROGRAMS_PER_SAMPLE = 50
+    MAX_SAMPLES_PER_SPEAKER = 10
+    MAX_SPECTROGRAMS_PER_SAMPLE = 20
     PICK_RANDOM_SPECTROGRAMS = True
     TEST_RESULTS = False
 

@@ -10,7 +10,7 @@ import random
 import math
 from string import ascii_lowercase
 from scipy.spatial.distance import cdist
-#import libs.visualization as _viz
+import libs.visualization as _viz
 import sys
 from glob import glob
 import re
@@ -94,6 +94,8 @@ def checkpoint(id=None, data=None, path='./checkpoints', cleanup=True):
     if id is None or data is None:
         print('Missing checkpoint parameters, skipping')
         return False
+    if not os.path.isdir(path):
+        os.mkdir(path)
     chkptfname = os.path.join(path, f'{id}{(counter+1):03}.dict')
     torch.save(data, chkptfname)
     if not os.path.isfile(chkptfname):

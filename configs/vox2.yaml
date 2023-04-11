@@ -16,7 +16,7 @@ general:
     value: 2000
   batch_size:
     desc: Batch size
-    value: 64
+    value: 128
   torchinfo_shape:
     desc: Torchinfo shape
     value: [64,1,64,192]
@@ -24,13 +24,13 @@ general:
 optimizer:
   initial_lr:
     desc: Initial lr
-    value: 0.001
+    value: 0.0005
   momentum:
     desc: Momentum
     value: 0.9
   weight_decay:
     desc: Weight decay
-    value: 0
+    value: 0.0001
   nesterov:
     desc: Use Nesterov?
     value: False
@@ -52,7 +52,7 @@ wandb:
 model:
   name:
     desc: Model name
-    value: WideResNet2810
+    value: Janet
   override_classifier:
     desc: Classifier name
     value: Classifier
@@ -62,21 +62,19 @@ dataset:
   train:
     file:
       desc: Dataset index, train
-      value: /mnt/nvme2tb/datasets/voxceleb2/final/train.dt
+      value: /media/sergey/EXT4/datasets/VOX/train.dt
     dirs:
       desc: Dataset dirs, train
       value: 
-        - /mnt/nvme2tb/datasets/voxceleb2/final/cache/train
-        - /mnt/nvme1tb/datasets/voxceleb2/final/cache/train
+        - /media/sergey/EXT4/datasets/VOX/data/train
   test:
     file:
       desc: Dataset index, test
-      value: /mnt/nvme2tb/datasets/voxceleb2/final/test.dt
+      value: /media/sergey/EXT4/datasets/VOX/test.dt
     dirs:
       desc: Dataset dirs, test
       value: 
-        - /mnt/nvme2tb/datasets/voxceleb2/final/cache/test
-        - /mnt/nvme1tb/datasets/voxceleb2/final/cache/test
+        - /media/sergey/EXT4/datasets/VOX/data/test
   useindex:
     desc: Use file indexing to speed up localization of the spectrograms 
     value: True

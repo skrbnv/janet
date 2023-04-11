@@ -69,18 +69,19 @@ def train(train_loader,
         augms.remove('grad_clip')
     else:
         gclip = False
-
+    augms.append('')
     losses = []
-    losses.extend(
-        train_loop(train_loader=train_loader,
-                   model=model,
-                   optimizer=optimizer,
-                   criterion=criterion,
-                   num_classes=num_classes,
-                   augmentations=augms,
-                   extras=extras,
-                   lsm=lsm,
-                   gclip=gclip))
+    for augm in augms:
+        losses.extend(
+            train_loop(train_loader=train_loader,
+                       model=model,
+                       optimizer=optimizer,
+                       criterion=criterion,
+                       num_classes=num_classes,
+                       augmentations=[augm],
+                       extras=extras,
+                       lsm=lsm,
+                       gclip=gclip))
 
     return losses
 

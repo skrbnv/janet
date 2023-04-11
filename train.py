@@ -3,11 +3,10 @@ import libs.functions as _fn
 from libs.data import Dataset
 import libs.losses as _losses
 import libs.classifier as _cls
-import libs.models_polynomial_2 as models
+import libs.models as models
 import wandb
 import os
 import torchinfo
-import sys
 import argparse
 from torch.utils.data import DataLoader
 
@@ -19,7 +18,7 @@ if __name__ == '__main__':
     _fn.report("**           instead of triplet loss.           **")
     _fn.report("**************************************************")
     _fn.todolist()
-    _fn.fix_seed(1)
+    _fn.fix_seed(42)
     # ------------------------- INIT -------------------------
     parser = argparse.ArgumentParser()
     parser.add_argument('--wandb',
@@ -116,13 +115,13 @@ if __name__ == '__main__':
     criterion = torch.nn.CrossEntropyLoss()
 
     # Setting up optimizer and scheduler
-    #optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-    optimizer = torch.optim.SGD(
-        model.parameters(),
-        lr=CONFIG['optimizer']['initial_lr']['value'],
-        momentum=CONFIG['optimizer']['momentum']['value'],
-        weight_decay=CONFIG['optimizer']['weight_decay']['value'],
-        nesterov=CONFIG['optimizer']['nesterov']['value'])
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+    #optimizer = torch.optim.SGD(
+    #    model.parameters(),
+    #    lr=CONFIG['optimizer']['initial_lr']['value'],
+    #    momentum=CONFIG['optimizer']['momentum']['value'],
+    #    weight_decay=CONFIG['optimizer']['weight_decay']['value'],
+    #    nesterov=CONFIG['optimizer']['nesterov']['value'])
     #if RESUME:
     #    optimizer.load_state_dict(checkpoint['optimizer'])
     #    _fn.report("Optimizer state dict loaded from checkpoint")
@@ -140,17 +139,17 @@ if __name__ == '__main__':
                 cache_paths=CONFIG['dataset']['train']['dirs']['value'],
                 force_even=True,
                 useindex=CONFIG['dataset']['useindex']['value'],
-                caching=True)
+                caching=False)
     DT = D.get_randomized_subset_with_augmentation(
-        max_records=20,
+        max_records=50,
         speakers_filter=D.get_unique_speakers(),
         augmentations_filter=[],
         useindex=CONFIG['dataset']['useindex']['value'],
-        caching=True)
+        caching=False)
     T = Dataset(filename=CONFIG['dataset']['test']['file']['value'],
                 cache_paths=CONFIG['dataset']['test']['dirs']['value'],
                 useindex=CONFIG['dataset']['useindex']['value'],
-                caching=True)
+                caching=False)
 
     train_loader = DataLoader(
         D,

@@ -4,7 +4,7 @@ general:
     value: ./checkpoints/n8hpx2ki038.dict
   checkpoint:
     desc: Checkpoint filename
-    value: ./checkpoints/3kbp9k6a014.dict
+    value: ./checkpoints/1o4tngu8008.dict
   classes:
     desc: Number of classes
     value: 630
@@ -60,19 +60,19 @@ dataset:
   train:
     file:
       desc: Dataset index, train
-      value: /home/sergey/code/simple/datasets/train.dt
+      value: /media/sergey/EXT4/datasets/TIMIT2/generated/simple/datasets/train.dt
     dirs:
       desc: Dataset dirs, train
       value: 
-        - /home/sergey/code/simple/cache/train
+        - /media/sergey/EXT4/datasets/TIMIT2/generated/simple/cache/train
   test:
     file:
       desc: Dataset index, test
-      value: /home/sergey/code/simple/datasets/test.dt
+      value: /media/sergey/EXT4/datasets/TIMIT2/generated/simple/datasets/test.dt
     dirs:
       desc: Dataset dirs, test
       value: 
-        - /home/sergey/code/simple/cache/test
+        - /media/sergey/EXT4/datasets/TIMIT2/generated/simple/cache/test
   useindex:
     desc: Use file indexing to speed up localization of the spectrograms 
     value: False
