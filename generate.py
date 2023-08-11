@@ -59,7 +59,7 @@ if __name__ == '__main__':
     # Do not add first frame to set due to
     # a lot of examples ending up in outliers
 
-    #SPECTROGRAMS#
+    # SPECTROGRAMS
     MAX_SPEAKERS = 5994
     MAX_SAMPLES_PER_SPEAKER = 10
     MAX_SPECTROGRAMS_PER_SAMPLE = 20
@@ -102,7 +102,7 @@ if __name__ == '__main__':
         PRIMARY_CACHE, AUXILLARY_CACHE
     ]
     D = Dataset(cache_paths=cache_paths)
-    #cache = _cw.CachedWrites('/media/sergey/3Tb1/cache')
+    # cache = _cw.CachedWrites('/media/sergey/3Tb1/cache')
     if RECORDS_DUMP:
         if not os.path.exists(RECORDS_DUMP):
             os.mkdir(RECORDS_DUMP)
@@ -138,7 +138,7 @@ if __name__ == '__main__':
                         _mp.mp_worker, (j + 1, folders[j], limit, config))
                     results.append(result)
             if RECORDS_DUMP:
-                #[result.wait() for result in results]
+                # [result.wait() for result in results]
                 while True:
                     time.sleep(1)
                     # catch exception is results are not ready yet
@@ -201,7 +201,7 @@ if __name__ == '__main__':
     else:
         if not RESUME:
             raise IOError('No speakers\' dirs found in mentioned directory')
-        #cache.finalize()
+        # cache.finalize()
 
     if RECORDS_DUMP:
         dump = _fn.filelist(RECORDS_DUMP)

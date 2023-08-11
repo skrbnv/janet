@@ -138,7 +138,7 @@ def test_loop(loader, model, criterion=None):
                 losses.append(loss.item())
         # three options: indices, one-hot or soft probabilities (including n-hot)
         if len(labels[0]) == 1:
-            #indices
+            # indices
             raise Exception("Not implemented")
             indices_t1 = torch.argmax(y_pred, dim=1)
             indices_t5 = torch.topk(y_pred, 5)

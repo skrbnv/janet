@@ -83,10 +83,10 @@ if __name__ == '__main__':
 
     Model = getattr(models, CONFIG['model']['name']['value'])
     model = Model(num_classes=CONFIG['general']['classes']['value'])
-
     model.float()
     model.to(device)
     _fn.report(f"Model {CONFIG['model']['name']['value']} created")
+    _fn.copy_model_file(filename=models.__file__, id=RUN_ID)
 
     if RESUME:
         model.load_state_dict(checkpoint['state_dict'])
@@ -103,7 +103,8 @@ if __name__ == '__main__':
 
     print(model)
     torchinfo.summary(model,
-                      tuple(CONFIG['general']['torchinfo_shape']['value']))
+                      tuple(CONFIG['general']['torchinfo_shape']['value']),
+                      depth=8)
 
     # Setting up initial epoch
     initial_epoch = 0
@@ -116,23 +117,23 @@ if __name__ == '__main__':
 
     # Setting up optimizer and scheduler
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-    #optimizer = torch.optim.SGD(
+    # optimizer = torch.optim.SGD(
     #    model.parameters(),
     #    lr=CONFIG['optimizer']['initial_lr']['value'],
     #    momentum=CONFIG['optimizer']['momentum']['value'],
     #    weight_decay=CONFIG['optimizer']['weight_decay']['value'],
     #    nesterov=CONFIG['optimizer']['nesterov']['value'])
-    #if RESUME:
+    # if RESUME:
     #    optimizer.load_state_dict(checkpoint['optimizer'])
     #    _fn.report("Optimizer state dict loaded from checkpoint")
     _fn.report("Optimizer initialized")
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
                                                            T_max=200)
-    #scheduler = StepDownScheduler(optimizer,
+    # scheduler = StepDownScheduler(optimizer,
     #                              initial_epoch=initial_epoch,
     #                              config=CONFIG['scheduler'])
-    #_fn.report("Scheduler initialized")
+    # _fn.report("Scheduler initialized")
 
     # Setting up datasets and data loaders
     D = Dataset(filename=CONFIG['dataset']['train']['file']['value'],
@@ -169,7 +170,7 @@ if __name__ == '__main__':
     _fn.report("Datasets loaded")
 
     ########################################################
-    ####                  NN cycle                      ####
+    #                       NN cycle
     ########################################################
     if WANDB:
         wandb.watch(model)
@@ -220,7 +221,7 @@ if __name__ == '__main__':
             })
 
         ##########################################################
-        ##### Saving checkpoint if testing accuracy improved
+        #     Saving checkpoint if testing accuracy improved
         ##########################################################
         if top1test > top1:
             top1 = top1test
@@ -231,7 +232,9 @@ if __name__ == '__main__':
                                'optimizer': optimizer.state_dict(),
                                'top1': top1
                            })
-        #if _fn.early_stop(lss.mean_per_epoch(), criterion='min'):
-        #    print("Early stop triggered")
-        #    sys.exit(0)
+        '''
+        if _fn.early_stop(lss.mean_per_epoch(), criterion='min'):
+            print("Early stop triggered")
+            sys.exit(0)
+        '''
         scheduler.step()

@@ -15,6 +15,7 @@ import sys
 from glob import glob
 import re
 import yaml
+from shutil import copyfile
 
 global ambientmemcache
 global musicmemcache
@@ -60,8 +61,8 @@ def fix_seed(seed=1):
     torch.cuda.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-    #torch.backends.cudnn.enabled = False
-    #torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.enabled = False
+    # torch.backends.cudnn.deterministic = True
     return True
 
 
@@ -81,7 +82,19 @@ def cleanup(run_id=None, checkpointdir='./checkpoints'):
     return True
 
 
+def copy_model_file(id, path='./checkpoints', filename=None):
+    assert filename is not None, 'no filename provided'
+    path = os.path.join(path, id)
+    if not os.path.isdir(path):
+        os.mkdir(path)
+    copyfile(filename, os.path.join(path, 'model.txt'))
+    return True
+
+
 def checkpoint(id=None, data=None, path='./checkpoints', cleanup=True):
+    path = os.path.join(path, id)
+    if not os.path.isdir(path):
+        os.mkdir(path)
     removables = glob(os.path.join(path, f'{id}*'))
     if len(removables) > 0:
         latest = os.path.basename(max(removables, key=os.path.getctime))
@@ -141,7 +154,7 @@ def raw_audio_by_dir(folder=".", limit=0):
             if limit > 0 and index >= limit:
                 continue  # skip rest of the files
             checkfilename = root + '/' + filename
-            #print(os.path.basename(root))
+            # print(os.path.basename(root))
             extensions = ('.mp3', '.wav', '.mp4', ".ogg", '.flac', '.aac',
                           '.m4a')
             if checkfilename.endswith(extensions):
@@ -152,8 +165,8 @@ def raw_audio_by_dir(folder=".", limit=0):
                 except Exception:
                     report("Can't read file %s, skipping" % (checkfilename))
                     continue
-                    #raise IOError("Can't read file", checkfilename)
-                    #return np.empty(shape=(0, 0))
+                    # raise IOError("Can't read file", checkfilename)
+                    # return np.empty(shape=(0, 0))
                 if data.shape[0] == 0:
                     report(
                         "Warning: Audio row returned 0 length when trying to read",
@@ -167,7 +180,7 @@ def raw_audio_by_dir(folder=".", limit=0):
                         data = librosa.resample(data,
                                                 orig_sr=sr,
                                                 target_sr=16000)
-                        #output.append(
+                        # output.append(
                         #    [os.path.basename(root) + "-" + filename, data])
                         output.append([filename, data])
     return output
@@ -187,13 +200,13 @@ def nonpaddedsignal(signal):
 # add white noise
 def whitenoise(signal, snr=15):
     ss = nonpaddedsignal(signal)
-    #rms = np.mean(librosa.feature.rms(y=ss))
-    #if rms == 0:
+    # rms = np.mean(librosa.feature.rms(y=ss))
+    # if rms == 0:
     #    raise Exception(
     #        "RMS mean is equal to zero. Either you passed zeros as signal or librosa malfunctioned"
     #    )
     # generate rms of noise then add
-    #noise = np.random.normal(0, np.sqrt(rms**2 / 10**(snr / 10)), ss.shape[0])
+    # noise = np.random.normal(0, np.sqrt(rms**2 / 10**(snr / 10)), ss.shape[0])
     gamma = 10**(snr / 10)
     pwr = np.mean(abs(ss)**2)
     nsd = pwr / gamma
@@ -268,8 +281,10 @@ def reverse_sample(signal):
 # add talk in the background
 def add_ambient(signal, snr=15):
     ss = nonpaddedsignal(signal)
-    #if len(ambientmemcache) == 0:
-    #	loadAmbientToMemCache() NOT THE BEST OPTION FOR MULTIPROCESSING
+    '''
+    if len(ambientmemcache) == 0:
+        loadAmbientToMemCache() NOT THE BEST OPTION FOR MULTIPROCESSING
+    '''
     key = random.choice(list(ambientmemcache.keys()))
     noise = ambientmemcache[key]
     ln = len(noise)
@@ -290,8 +305,10 @@ def add_ambient(signal, snr=15):
 # add music in the background
 def add_music(signal, snr=10):
     ss = nonpaddedsignal(signal)
-    #if len(ambientmemcache) == 0:
-    #	loadAmbientToMemCache() NOT THE BEST OPTION FOR MULTIPROCESSING
+    '''
+    if len(ambientmemcache) == 0:
+        loadAmbientToMemCache() NOT THE BEST OPTION FOR MULTIPROCESSING
+    '''
     key = random.choice(list(musicmemcache.keys()))
     noise = musicmemcache[key]
     ln = len(noise)
@@ -310,7 +327,7 @@ def add_music(signal, snr=10):
 
 
 def add_randomshift(signal):
-    #check if non-zero elements available end of array
+    # check if non-zero elements available end of array
     zeros = np.nonzero(np.flip(signal))[0][0]
     if zeros > 0:
         shift = np.random.randint(zeros)
@@ -344,13 +361,13 @@ def prepare_audio(raw_audio,
 
     # new strategy:
     # - slice raw audio into intervals
-    # - replace silent pauses with zeros (for attention mask) (because pauses matter)
+    # - replace silent pauses with zeros (because pauses matter)
     # - generate one large spectrogram (speed up process)
     # - retrieve parts of spectrogram less than 3sec long starting from each "word" (slices attached to actual words)
     # - (or we can make sets of "words" with set length, like two "words" in a row)
     # - pad rest of the spectrogram with "zeros"
 
-    #split into intervals
+    # split into intervals
     intervals = librosa.effects.split(y=raw_audio, top_db=30)
     # pad skipped parts with zeros
     raw_audio_zeroed = np.zeros((raw_audio.shape), dtype='float32')

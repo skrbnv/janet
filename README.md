@@ -1,4 +1,4 @@
-# Improving Text-Independent Speaker Identification by Introducing Elements of Attention to Convolutional Layout
+# Alignment layer to improve convolutions for directional data
 
 
 

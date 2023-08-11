@@ -1,6 +1,6 @@
 import torch
-#import numpy as np
-#import gc
+# import numpy as np
+# import gc
 import libs.functions as _fn
 from libs.data import Dataset
 import libs.losses as _losses
@@ -10,7 +10,7 @@ import libs.models as models
 import wandb
 import os
 import torchinfo
-import sys
+# import sys
 import argparse
 from torch.utils.data import DataLoader
 
@@ -114,14 +114,14 @@ if RESUME:
 criterion = torch.nn.CrossEntropyLoss()
 
 # Setting up optimizer and scheduler
-#optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+# optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 optimizer = torch.optim.SGD(
     model.parameters(),
     lr=CONFIG['optimizer']['initial_lr']['value'],
     momentum=CONFIG['optimizer']['momentum']['value'],
     weight_decay=CONFIG['optimizer']['weight_decay']['value'],
     nesterov=CONFIG['optimizer']['nesterov']['value'])
-#if RESUME:
+# if RESUME:
 #    optimizer.load_state_dict(checkpoint['optimizer'])
 #    _fn.report("Optimizer state dict loaded from checkpoint")
 _fn.report("Optimizer initialized")
@@ -129,7 +129,7 @@ _fn.report("Optimizer initialized")
 scheduler = StepDownScheduler(optimizer,
                               initial_epoch=initial_epoch,
                               config=CONFIG['scheduler'])
-#_fn.report("Scheduler initialized")
+# _fn.report("Scheduler initialized")
 
 # Setting up datasets and data loaders
 D = Dataset(filename=CONFIG['dataset']['train']['file']['value'],
@@ -158,7 +158,7 @@ train_eval_loader = DataLoader(
 _fn.report("Datasets loaded")
 
 ########################################################
-####                  NN cycle                      ####
+#                       NN cycle  
 ########################################################
 if WANDB:
     wandb.watch(model)
@@ -207,7 +207,7 @@ for epoch in range(initial_epoch, CONFIG['general']['epochs']['value']):
         })
 
     ##########################################################
-    ##### Saving checkpoint if testing accuracy improved
+    #      Saving checkpoint if testing accuracy improved
     ##########################################################
     if top1test > top1:
         top1 = top1test
@@ -218,7 +218,7 @@ for epoch in range(initial_epoch, CONFIG['general']['epochs']['value']):
                            'optimizer': optimizer.state_dict(),
                            'top1': top1
                        })
-    #if _fn.early_stop(lss.mean_per_epoch(), criterion='min'):
+    # if _fn.early_stop(lss.mean_per_epoch(), criterion='min'):
     #    print("Early stop triggered")
     #    sys.exit(0)
     scheduler.step()

@@ -8,11 +8,8 @@
 			"name": "Python: Current File",
 			"type": "python",
 			"request": "launch",
-			"program": "${file}",
-			"console": "integratedTerminal",
-			"xdebugSettings": {
-				"max_data": 1000
-			}
+			"program": "train.py",
+			"console": "integratedTerminal"
 		}
 	]
 }

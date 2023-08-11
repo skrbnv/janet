@@ -55,7 +55,7 @@ def mp_worker(id, folder, length, config):
 
 def process_sample(sample, config):
     ''' Function responsible for processing single sample into set of spectrograms '''
-    #audioEmpzd = _fn.preemphasize(sample[1])
+    # audioEmpzd = _fn.preemphasize(sample[1])
     augmentations = [0]
     records = []
     for augmentation in augmentations:
@@ -74,7 +74,7 @@ def process_sample(sample, config):
         if spectrograms is None:
             return None
 
-        #shuffle slices to be able to pick spectrograms within sample in random order
+        # shuffle slices to be able to pick spectrograms within sample in random order
         indices = np.arange(len(spectrograms))
         if config['PICK_RANDOM_SPECTROGRAMS']:
             np.random.shuffle(indices)

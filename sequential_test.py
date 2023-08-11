@@ -5,7 +5,7 @@ import os
 import libs.models as models
 import pprint
 
-#checkpointfilename = '/home/sergey/code/cleanup/checkpoints/1jupj2ou001.dict'
+# checkpointfilename = '/home/sergey/code/cleanup/checkpoints/1jupj2ou001.dict'
 checkpointfilename = '/home/sergey/code/cleanup/checkpoints/3dvwk62l051.dict'
 test_dir = '/mnt/nvme2tb/datasets/TIMIT2/sorted/test'
 config = {
@@ -82,7 +82,7 @@ with torch.no_grad():
                 torch.from_numpy(spectrogram).float().unsqueeze(0).unsqueeze(
                     0).to(device))
             preds.append(torch.argmax(pred).item())
-            #print(pred)
+            # print(pred)
         results.append([speaker, spk_indices[speaker], preds])
 
 correct = 0
